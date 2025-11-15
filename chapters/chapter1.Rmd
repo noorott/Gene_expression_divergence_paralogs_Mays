@@ -42,22 +42,61 @@ names(sce_list) <- sub("\\.h5ad\\.gz$", "", basename(files))
 => sce_list is now a list of single cell experiments
 
 
+##########################
+## Datasets Exploration ##
+##########################
+
 ```{r}
-sce_info <- lapply(sce_list, function(x){
+sce_info <- sapply(sce_list, function(x){
   list(
-    n_genes = nrow(x),
+    organ = unique(colData(x)$Organ),
+    tissue =  unique(colData(x)$Tissue),
+    age = unique(colData(x)$ACE),
+    n_experiments = length(unique(colData(x)$Orig.ident)),  # not really sure what these are (technical replicates, biological replictes, ...?)
     n_cells = ncol(x),
-    assays = names(assays(x)),
-    colData_cols = colnames(colData(x))
+    n_celltypes = length(unique(colData(x)$Celltype)),
+    total_genes = nrow(x),
+    Avg_genes = round(mean(colData(x)$nFeature_RNA)),
+    Avg_library_size = round(mean(colData(x)$nCount_RNA))
   )
 })
 
-sce_info
+sce_info["tissue", "SRP325657_2"] <- "Leaf abaxial mature peel" # different suffixes here were different samples (all of leaf abaxial mature peel tissues)
+sce_info["n_celltypes", "SRP164771"] <- 1 # here celltypes are actually cellphases, dont think we can see this as celltypes
+# adding missing info
+sce_info["tissue", "SRP164771"] <- "Pollen" # from scPlantDB
+sce_info["organ", "SRP164771"] <- "Flower" # or maybe Stamen
+sce_info["age", "SRP164771"] <- "flower development" # from scPlantDB
 
+sce_info <- apply(sce_info, c(1,2), function(x) unlist(x)) # couldn't figure out how to unlist cells already in sce_info creation
+sce_info <- as.data.frame(sce_info)
+print(sce_info)
 ```
-
+Visualization
+```{r}
+# transfer into tidy format for ggplot visualization
+sce_info$stat <- rownames(sce_info)
+sce_info_tidy <- sce_info %>%
+  pivot_longer(cols = -stat, names_to = "sample", values_to = "value")
+```
 
 ```{r}
-
+sce_info_tidy %>% 
+  filter(stat %in% c("n_cells", 
+                     "n_celltypes", 
+                     "total_genes", 
+                     "Avg_genes", 
+                     "Avg_library_size")) %>%
+  ggplot(aes(x = sample, y = as.numeric(value))) +
+  geom_col() +
+  facet_wrap(~stat, scales = "free_y") +
+  scale_y_continuous(breaks = pretty_breaks(n = 4)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.3)) +
+  labs(x = NULL, y = NULL)
 ```
+suspicious that all but one datasets have the same number of total genes
+
+
+
 
