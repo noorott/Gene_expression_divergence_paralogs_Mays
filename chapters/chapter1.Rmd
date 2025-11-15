@@ -1,0 +1,63 @@
+---
+title: "chapter1"
+author: "Noor Ottevaere"
+date: "2025-11-15"
+output: html_document
+---
+
+```{r, message=FALSE}
+library(dplyr)
+library(zellkonverter)
+library(SingleCellExperiment)
+library(R.utils)
+library(here)
+```
+
+###################
+## Read in Data ##
+###################
+
+```{r}
+data_dir <- here("scRNAseq_data", "zea_mays")
+```
+
+```{r}
+files <- list.files(path = data_dir, pattern = "\\.h5ad\\.gz$", full.names = TRUE)
+```
+
+```{r}
+read_h5ad_gz <- function(file){
+  h5ad_file <- gunzip(file, overwrite = TRUE, remove = FALSE) # keep .gz
+  sce <- readH5AD(h5ad_file)
+  return(sce)
+}
+```
+
+## convert to single cell experiments
+
+```{r, message = FALSE}
+sce_list <- lapply(files, read_h5ad_gz)
+names(sce_list) <- sub("\\.h5ad\\.gz$", "", basename(files))
+```
+=> sce_list is now a list of single cell experiments
+
+
+```{r}
+sce_info <- lapply(sce_list, function(x){
+  list(
+    n_genes = nrow(x),
+    n_cells = ncol(x),
+    assays = names(assays(x)),
+    colData_cols = colnames(colData(x))
+  )
+})
+
+sce_info
+
+```
+
+
+```{r}
+
+```
+
