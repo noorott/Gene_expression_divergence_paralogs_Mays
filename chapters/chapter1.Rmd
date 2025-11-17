@@ -11,6 +11,9 @@ library(zellkonverter)
 library(SingleCellExperiment)
 library(R.utils)
 library(here)
+library(tidyr)
+library(ggplot2)
+library(scales)
 ```
 
 ###################
@@ -22,25 +25,24 @@ data_dir <- here("scRNAseq_data", "zea_mays")
 ```
 
 ```{r}
+### Don't run this again if files are already unzipped
 files <- list.files(path = data_dir, pattern = "\\.h5ad\\.gz$", full.names = TRUE)
+for (f in files) {
+  gunzip(f, overwrite = TRUE, remove = FALSE)   # removes .gz and leaves .h5ad
+}
 ```
 
 ```{r}
-read_h5ad_gz <- function(file){
-  h5ad_file <- gunzip(file, overwrite = TRUE, remove = FALSE) # keep .gz
-  sce <- readH5AD(h5ad_file)
-  return(sce)
-}
+unziped_files <- list.files(path=data_dir, pattern = "\\.h5ad$", full.names = TRUE)
 ```
 
 ## convert to single cell experiments
 
 ```{r, message = FALSE}
-sce_list <- lapply(files, read_h5ad_gz)
+sce_list <- lapply(unziped_files, readH5AD)
 names(sce_list) <- sub("\\.h5ad\\.gz$", "", basename(files))
 ```
 => sce_list is now a list of single cell experiments
-
 
 ##########################
 ## Datasets Exploration ##
