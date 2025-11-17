@@ -40,7 +40,7 @@ unziped_files <- list.files(path=data_dir, pattern = "\\.h5ad$", full.names = TR
 
 ```{r, message = FALSE}
 sce_list <- lapply(unziped_files, readH5AD)
-names(sce_list) <- sub("\\.h5ad\\.gz$", "", basename(files))
+names(sce_list) <- sub("\\.h5ad$", "", basename(unziped_files))
 ```
 => sce_list is now a list of single cell experiments
 
