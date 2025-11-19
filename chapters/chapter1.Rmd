@@ -22,13 +22,13 @@ library(scales)
 data_dir <- here("scRNAseq_data", "zea_mays")
 ```
 
-
+```{r}
 ### Don't run this again if files are already unzipped
 files <- list.files(path = data_dir, pattern = "\\.h5ad\\.gz$", full.names = TRUE)
 for (f in files) {
   gunzip(f, overwrite = TRUE, remove = FALSE)   # removes .gz and leaves .h5ad
 }
-
+```
 
 ```{r}
 unziped_files <- list.files(path=data_dir, pattern = "\\.h5ad$", full.names = TRUE)
