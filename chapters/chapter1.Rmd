@@ -6,11 +6,12 @@ output: html_document
 ---
 
 ```{r, message=FALSE}
-library(dplyr)
 library(zellkonverter)
 library(SingleCellExperiment)
 library(R.utils)
 library(here)
+library(tidyverse)
+library(scales)
 ```
 
 ###################
@@ -21,26 +22,25 @@ library(here)
 data_dir <- here("scRNAseq_data", "zea_mays")
 ```
 
-```{r}
+
+### Don't run this again if files are already unzipped
 files <- list.files(path = data_dir, pattern = "\\.h5ad\\.gz$", full.names = TRUE)
-```
+for (f in files) {
+  gunzip(f, overwrite = TRUE, remove = FALSE)   # removes .gz and leaves .h5ad
+}
+
 
 ```{r}
-read_h5ad_gz <- function(file){
-  h5ad_file <- gunzip(file, overwrite = TRUE, remove = FALSE) # keep .gz
-  sce <- readH5AD(h5ad_file)
-  return(sce)
-}
+unziped_files <- list.files(path=data_dir, pattern = "\\.h5ad$", full.names = TRUE)
 ```
 
 ## convert to single cell experiments
 
 ```{r, message = FALSE}
-sce_list <- lapply(files, read_h5ad_gz)
-names(sce_list) <- sub("\\.h5ad\\.gz$", "", basename(files))
+sce_list <- lapply(unziped_files, readH5AD)
+names(sce_list) <- sub("\\.h5ad$", "", basename(unziped_files))
 ```
 => sce_list is now a list of single cell experiments
-
 
 ##########################
 ## Datasets Exploration ##
@@ -97,6 +97,43 @@ sce_info_tidy %>%
 ```
 suspicious that all but one datasets have the same number of total genes
 
+Check annotated celltypes in datasets
+```{r}
+cell_types <- sapply(sce_list, function(x){
+  list(
+    c(unique(colData(x)$Celltype), rep( "/", 13 - length(unique(colData(x)$Celltype)) ))
+  )
+})
+cell_types <- as.data.frame(cell_types)
+colnames(cell_types) <- paste(colnames(cell_types), sce_info["tissue",])
+```
 
-
-
+Problems
+- "Unknow": throw out
+- "Contamination": throw out
+- cell phases: throw out 
+- SRP145013:
+    - root pith, xylem part of root stele
+- SRP224648 and SRP281914: only 2 celltypes; not really enough to define REB
+  --> dont use for individual dataset analysis (but do use for total)
+- SRP325657_1: only 3 celltypes
+  --> enough for individual analysis
+- SRP325657_2: Pavement cell-N and Pavement cell-A	 
+    PCs-A: PCs with active anthocyanin biosynthesis
+    PCs-N: PCs lacking active anthocyanin biosynthesis
+    should probably merge these
+- SRP417893: leaf rim; dubious celltype
+    "Here we use single-cell RNA-sequencing analyses to identify a ‘rim’ cell type 
+    present at the margins of maize leaf primordia. Cells in the leaf rim have a 
+    distinctive identity and share transcriptional signatures with proliferating 
+    ligule cells"
+    can probably be seen as valid celltype, otherwise merged with leaf primordium
+- resolution problem; 
+  some datasets have more celltypes simply because higher resolution or more 
+  similar celltypes
+  eg SRP272727_23_26; multiple meristem subcategories
+  eg SRP266308_1; vascular tissue <-> other; xylem & phloem
+  -->
+  
+QC with scuttle::quickPerCellQC
+make matrix: 
