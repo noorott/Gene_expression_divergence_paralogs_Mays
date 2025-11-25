@@ -121,7 +121,7 @@ Problems
 - SRP325657_2: Pavement cell-N and Pavement cell-A	 
     PCs-A: PCs with active anthocyanin biosynthesis
     PCs-N: PCs lacking active anthocyanin biosynthesis
-    should probably merge these
+    should probably merge these --> look whether PCs-N is transformed, yes? --> throw out
 - SRP417893: leaf rim; dubious celltype
     "Here we use single-cell RNA-sequencing analyses to identify a ‘rim’ cell type 
     present at the margins of maize leaf primordia. Cells in the leaf rim have a 
@@ -134,8 +134,10 @@ Problems
   eg SRP272727_23_26; multiple meristem subcategories
   eg SRP266308_1; vascular tissue <-> other; xylem & phloem
   -->
-  
-QC with scuttle::quickPerCellQC
-make matrix: 
 
-sjfkmsdljfksjf ksjfk js
+TO DO: 
+- integrate all data sets into one `SingleCellExperiment` object while taking potential batch effects into account
+- make matrix aggregating counts per celltype by mean, median, sum
+
+
+
