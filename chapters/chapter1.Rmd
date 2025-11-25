@@ -138,8 +138,7 @@ filtering
 bad_celltypes <- c("Unknow", 
                    "Contamination")
 
-bad_genotypes <- c("B73 (ns)") # two genotypes present in sample SRP417893: B73 and B73 (ns); only use WT
-# (B73 (ns): double mutations in the redundant maize Wox3 homologs narrow sheath1 (Ns1) and narrow sheath2 (Ns2) delete the marginal domain, resulting in narrow leaves that fail to form a sheathing leaf base)
+bad_genotypes <- c("B73 (ns)") 
 
 bad_conditions <- c("Kn1-O/+",  
                     "Nitrate-")
