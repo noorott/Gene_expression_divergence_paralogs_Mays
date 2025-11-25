@@ -42,6 +42,7 @@ names(sce_list) <- sub("\\.h5ad$", "", basename(unziped_files))
 ```
 => sce_list is now a list of single cell experiments
 
+
 ##########################
 ## Datasets Exploration ##
 ##########################
@@ -95,7 +96,6 @@ sce_info_tidy %>%
   theme(axis.text.x = element_text(angle = 90, vjust = 0.3)) +
   labs(x = NULL, y = NULL)
 ```
-suspicious that all but one datasets have the same number of total genes
 
 Check annotated celltypes in datasets
 ```{r}
@@ -105,13 +105,9 @@ cell_types <- sapply(sce_list, function(x){
   )
 })
 cell_types <- as.data.frame(cell_types)
-colnames(cell_types) <- paste(colnames(cell_types), sce_info["tissue",])
 ```
-
 Problems
-- "Unknow": throw out
-- "Contamination": throw out
-- cell phases: throw out 
+- contamination and unknow
 - SRP145013:
     - root pith, xylem part of root stele
 - SRP224648 and SRP281914: only 2 celltypes; not really enough to define REB
@@ -121,7 +117,7 @@ Problems
 - SRP325657_2: Pavement cell-N and Pavement cell-A	 
     PCs-A: PCs with active anthocyanin biosynthesis
     PCs-N: PCs lacking active anthocyanin biosynthesis
-    should probably merge these --> look whether PCs-N is transformed, yes? --> throw out
+    natural celltypes (not transformed)
 - SRP417893: leaf rim; dubious celltype
     "Here we use single-cell RNA-sequencing analyses to identify a ‘rim’ cell type 
     present at the margins of maize leaf primordia. Cells in the leaf rim have a 
@@ -135,9 +131,43 @@ Problems
   eg SRP266308_1; vascular tissue <-> other; xylem & phloem
   -->
 
+
+
+filtering
+```{r}
+bad_celltypes <- c("Unknow", 
+                   "Contamination")
+
+bad_genotypes <- c("B73 (ns)") # two genotypes present in sample SRP417893: B73 and B73 (ns); only use WT
+# (B73 (ns): double mutations in the redundant maize Wox3 homologs narrow sheath1 (Ns1) and narrow sheath2 (Ns2) delete the marginal domain, resulting in narrow leaves that fail to form a sheathing leaf base)
+
+bad_conditions <- c("Kn1-O/+",  
+                    "Nitrate-")
+test <- lapply(sce_list, function(sce) {
+  keep <- !colData(sce)$Celltype %in% bad_celltypes &
+          !colData(sce)$Genotype %in% bad_genotypes &
+          !colData(sce)$Condition %in% bad_conditions
+  sce[, keep]
+})
+```
+- SRP417893: two genotypes: B73 and B73 (ns); only use WT
+(B73 (ns): double mutations in the redundant maize Wox3 homologs narrow sheath1 (Ns1) and narrow sheath2 (Ns2) delete the marginal domain, resulting in narrow leaves that fail to form a sheathing leaf base)
+- SRP266308_1: 2 conditions: Kn1-O/+  and normal cells; only use normal cells?
+Kn1-O/+ is some mutant line from what i understand from paper
+- SRP335180: 2 conditions: nitrate+ and nitrate- plants 
+(grown in medium with or without nitrate); only use nitrate+ since this seems the normal condition?
+
+
+
 TO DO: 
+- filter datasets ()
 - integrate all data sets into one `SingleCellExperiment` object while taking potential batch effects into account
 - make matrix aggregating counts per celltype by mean, median, sum
+- put unzip block into if statement
+- investigate what n_experiments is (see line 56)
+
+
+
 
 
 
