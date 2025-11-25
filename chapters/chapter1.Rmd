@@ -143,7 +143,7 @@ bad_genotypes <- c("B73 (ns)") # two genotypes present in sample SRP417893: B73 
 
 bad_conditions <- c("Kn1-O/+",  
                     "Nitrate-")
-test <- lapply(sce_list, function(sce) {
+sce_list <- lapply(sce_list, function(sce) {
   keep <- !colData(sce)$Celltype %in% bad_celltypes &
           !colData(sce)$Genotype %in% bad_genotypes &
           !colData(sce)$Condition %in% bad_conditions
@@ -160,9 +160,10 @@ Kn1-O/+ is some mutant line from what i understand from paper
 
 
 TO DO: 
-- filter datasets ()
+- filter datasets: already done on celltype, genotype and condition: check whether there's additional stuff that needs to be thrown out
 - integrate all data sets into one `SingleCellExperiment` object while taking potential batch effects into account
 - make matrix aggregating counts per celltype by mean, median, sum
+
 - put unzip block into if statement
 - investigate what n_experiments is (see line 56)
 
