@@ -63,11 +63,6 @@ sce_info <- sapply(sce_list, function(x){
 })
 
 sce_info["tissue", "SRP325657_2"] <- "Leaf abaxial mature peel" # different suffixes here were different samples (all of leaf abaxial mature peel tissues)
-sce_info["n_celltypes", "SRP164771"] <- 1 # here celltypes are actually cellphases, dont think we can see this as celltypes
-# adding missing info
-sce_info["tissue", "SRP164771"] <- "Pollen" # from scPlantDB
-sce_info["organ", "SRP164771"] <- "Flower" # or maybe Stamen
-sce_info["age", "SRP164771"] <- "flower development" # from scPlantDB
 
 sce_info <- apply(sce_info, c(1,2), function(x) unlist(x)) # couldn't figure out how to unlist cells already in sce_info creation
 sce_info <- as.data.frame(sce_info)
@@ -149,6 +144,28 @@ sce_list <- lapply(sce_list, function(sce) {
   sce[, keep]
 })
 ```
+
+```{r}
+df <- map_df(names(sce_list), function(name) {
+  sce <- sce_list[[name]]
+  expr <- assay(sce, "X")   # your assay
+
+  tibble(
+    dataset = name,
+    n_genes = colSums(expr > 0),
+    #tissue = tissue_lookup[name]  # automatically gets tissue
+  )
+})
+
+ggplot(df, aes(x = dataset, y = n_genes, fill = dataset)) +
+  geom_violin(trim = FALSE) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+=> densities are not at all comparable, we need to do normalisation
+
 - SRP417893: two genotypes: B73 and B73 (ns); only use WT
 (B73 (ns): double mutations in the redundant maize Wox3 homologs narrow sheath1 (Ns1) and narrow sheath2 (Ns2) delete the marginal domain, resulting in narrow leaves that fail to form a sheathing leaf base)
 - SRP266308_1: 2 conditions: Kn1-O/+  and normal cells; only use normal cells?
