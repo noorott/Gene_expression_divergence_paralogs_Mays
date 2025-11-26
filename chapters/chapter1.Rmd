@@ -153,7 +153,7 @@ df <- map_df(names(sce_list), function(name) {
   tibble(
     dataset = name,
     n_genes = colSums(expr > 0),
-    colData(sce)$Tissue  # automatically gets tissue
+    tissue = colData(sce)$Tissue  # automatically gets tissue
   )
 })
 
