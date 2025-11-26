@@ -153,11 +153,11 @@ df <- map_df(names(sce_list), function(name) {
   tibble(
     dataset = name,
     n_genes = colSums(expr > 0),
-    #tissue = tissue_lookup[name]  # automatically gets tissue
+    colData(sce)$Tissue  # automatically gets tissue
   )
 })
 
-ggplot(df, aes(x = dataset, y = n_genes, fill = dataset)) +
+ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
   geom_violin(trim = FALSE) +
   theme_bw() +
   theme(
