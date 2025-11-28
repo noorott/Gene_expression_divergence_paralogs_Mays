@@ -12,6 +12,10 @@ library(R.utils)
 library(here)
 library(tidyverse)
 library(scales)
+library(scuttle)
+library(scater)
+library(scran)
+library(batchelor)
 ```
 
 ###################
@@ -24,10 +28,14 @@ data_dir <- here("scRNAseq_data", "zea_mays")
 
 ```{r}
 ### Don't run this again if files are already unzipped
-files <- list.files(path = data_dir, pattern = "\\.h5ad\\.gz$", full.names = TRUE)
-for (f in files) {
-  gunzip(f, overwrite = TRUE, remove = FALSE)   # removes .gz and leaves .h5ad
-}
+if (FALSE) {
+  files <- list.files(path = data_dir, pattern = "\\.h5ad\\.gz$", full.names = TRUE)
+  for (f in files) {
+    gunzip(f, overwrite = TRUE, remove = FALSE)   # removes .gz and leaves .h5ad
+  }
+  print("unzipped files")
+  }
+
 ```
 
 ```{r}
@@ -68,7 +76,7 @@ sce_info <- apply(sce_info, c(1,2), function(x) unlist(x)) # couldn't figure out
 sce_info <- as.data.frame(sce_info)
 print(sce_info)
 ```
-Visualization
+## Visualization
 ```{r}
 # transfer into tidy format for ggplot visualization
 sce_info$stat <- rownames(sce_info)
@@ -82,7 +90,8 @@ sce_info_tidy %>%
                      "n_celltypes", 
                      "total_genes", 
                      "Avg_genes", 
-                     "Avg_library_size")) %>%
+                     "Avg_library_size", 
+                     "n_experiments")) %>%
   ggplot(aes(x = sample, y = as.numeric(value))) +
   geom_col() +
   facet_wrap(~stat, scales = "free_y") +
@@ -100,6 +109,7 @@ cell_types <- sapply(sce_list, function(x){
   )
 })
 cell_types <- as.data.frame(cell_types)
+cell_types
 ```
 Problems
 - contamination and unknow
@@ -125,25 +135,18 @@ Problems
   eg SRP272727_23_26; multiple meristem subcategories
   eg SRP266308_1; vascular tissue <-> other; xylem & phloem
   -->
-
-
-
-filtering
+  
+UMAP plot of each data set colored by cell type
 ```{r}
-bad_celltypes <- c("Unknow", 
-                   "Contamination")
-
-bad_genotypes <- c("B73 (ns)") 
-
-bad_conditions <- c("Kn1-O/+",  
-                    "Nitrate-")
-sce_list <- lapply(sce_list, function(sce) {
-  keep <- !colData(sce)$Celltype %in% bad_celltypes &
-          !colData(sce)$Genotype %in% bad_genotypes &
-          !colData(sce)$Condition %in% bad_conditions
-  sce[, keep]
-})
+for (i in 1:length(sce_list)) {
+  plot <- plotReducedDim(sce_list[[i]], dimred = "X_umap", colour_by = "Celltype") +
+    ggtitle(names(sce_list[i]))
+  print(plot)
+} # haven't checked if this code works
 ```
+
+
+## Quality control of datasets
 
 ```{r}
 df <- map_df(names(sce_list), function(name) {
@@ -164,8 +167,29 @@ ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
 ```
-=> densities are not at all comparable, we need to do normalisation
 
+
+
+####################
+## Data Wrangling ##
+####################
+
+## filtering
+```{r}
+bad_celltypes <- c("Unknow", 
+                   "Contamination")
+
+bad_genotypes <- c("B73 (ns)") 
+
+bad_conditions <- c("Kn1-O/+",  
+                    "Nitrate-")
+sce_list <- lapply(sce_list, function(sce) {
+  keep <- !colData(sce)$Celltype %in% bad_celltypes &
+          !colData(sce)$Genotype %in% bad_genotypes &
+          !colData(sce)$Condition %in% bad_conditions
+  sce[, keep]
+})
+```
 - SRP417893: two genotypes: B73 and B73 (ns); only use WT
 (B73 (ns): double mutations in the redundant maize Wox3 homologs narrow sheath1 (Ns1) and narrow sheath2 (Ns2) delete the marginal domain, resulting in narrow leaves that fail to form a sheathing leaf base)
 - SRP266308_1: 2 conditions: Kn1-O/+  and normal cells; only use normal cells?
@@ -174,14 +198,211 @@ Kn1-O/+ is some mutant line from what i understand from paper
 (grown in medium with or without nitrate); only use nitrate+ since this seems the normal condition?
 
 
+## Combining seperate SingleCellExperiments into 1 object
+
+First we verify if single cell experiments can be merged without problems
+(cbind attempts to combine internal metadata tables of slots in SCE object --> these slots need to have same items)
+```{r}
+# Verify if gene names align
+print("gene names align:")
+all(sapply(X = sce_list, 
+       FUN = function(x) identical(rownames(x), rownames(sce_list$SRP145013))))
+
+# Verify if names in each slot of sce align
+  # assays
+print("assays names align:")
+all(sapply(X = sce_list, 
+       FUN = function(x) identical(names(assays(x)), names(assays(sce_list$SRP145013)))))
+  # colData
+print("colData names align:")
+all(sapply(X = sce_list, 
+       FUN = function(x) identical(names(assays(x)), names(assays(sce_list$SRP145013)))))
+  # rowData
+print("rowData names align:")
+all(sapply(X = sce_list, 
+       FUN = function(x) identical(names(rowData(x)), names(rowData(sce_list$SRP145013)))))
+  # reducedDims
+print("reducedDims names align:")
+all(sapply(X = sce_list, 
+       FUN = function(x) identical(names(reducedDims(x)), names(reducedDims(sce_list$SRP145013)))))
+  # int_colData
+print("int_colData names align:")
+all(sapply(X = sce_list, 
+       FUN = function(x) identical(names(int_colData(x)), names(int_colData(sce_list$SRP145013)))))
+```
+reduced dimensions do not aling for all datasets
+```{r}
+sapply(X = sce_list, 
+       FUN = function(x) names(reducedDims(x)))
+```
+Dataset SRP224648 has X_tsne in addition to X_umap in reduced dimension slot
+
+Remove tsne from Dataset SRP224648
+```{r}
+# back up tsne in separate variable for later if needed
+tsne_SRP224648 <- reducedDims(sce_list$SRP224648)$X_tsne
+
+reducedDims(sce_list$SRP224648)$X_tsne <- NULL
+names(reducedDims(sce_list$SRP224648))
+```
+Now everything aligns and sce list can be collapsed into one sce object
+
+```{r}
+# batch identifier already present in coldata()$Dataset
+
+# merge
+sce <- do.call(cbind, sce_list)
+# do.call expands list into individual elements for cbind to bind together
+
+# remove sce_list to save memory
+rm(sce_list)
+
+# more meaningfull name for assay
+names(assays(sce)) <- "logcounts"
+```
+
+
+## batch effect 
+
+Visualization first
+```{r}
+# Feature selection for dimensionality reduction: want genes that are 
+# informative of the biological structure of the data
+dec <- modelGeneVar(sce, block = sce$Dataset) # decomposition of variance
+chosen.hvgs <- dec$bio > 0                    # select genes with biological variance among datasets
+
+# saving because runTSNE takes long
+if (FALSE) {
+  sce <- runPCA(sce, subset_row = chosen.hvgs, ntop = 1000)
+  sce <- runTSNE(sce, dimred = "PCA")
+  saveRDS(sce, file = "sce_RedDim.rds")
+} else {
+  sce <- readRDS("sce_RedDim.rds")
+}
+
+sce$Dataset = as.factor(sce$Dataset)
+```
+
+making dataframe for TSNE plots
+```{r}
+color_vec <- c("#5A5156", "#E4E1E3", "#F6222E", "#FE00FA", "#16FF32", "#3283FE", 
+               "#FEAF16", "#B00068", "#1CFFCE", "#90AD1C", "#2ED9FF", "#DEA0FD", 
+               "#AA0DFE", "#F8A19F", "#325A9B", "#C4451C", "#1C8356", "#85660D", 
+               "#B10DA1", "#3B00FB", "#1CBE4F", "#FA0087", "#333333", "#F7E1A0", 
+               "#C075A6", "#AAF400", "#BDCDFF", "#822E1C", "#B5EFB5", 
+               "#7ED7D1", "#1C7F93", "#D85FF7", "#683B79", "#66B0FF", "#FBE426")
+
+TSNE_df <- as.data.frame(reducedDim(sce, "TSNE")) %>%  # make df from UMAP coordinates
+  mutate(celltype = colData(sce)$Celltype) %>% # add celltype
+  mutate(dataset = colData(sce)$Dataset) %>%   # add dataset id
+  mutate(tissue = colData(sce)$Tissue)         # add tissue
+```
+
+General TSNE plot
+```{r}
+TSNE_df %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = dataset)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    )
+
+TSNE_df %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    scale_color_manual(values = color_vec) +
+    labs(x = "TSNE1", y = "TSNE1") +
+    guides(                                     # separate aes for legend dots
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    ) +
+    theme(
+      legend.text = element_text(size = 8),     # textsize of legend elements
+      legend.key.size = unit(0.3, "cm"))        # boxsize of legend elements
+```
+possible problem: shared celltypes between datasets are taken together (eg xylem). Do we want this? Otherwise a suffix of the dataset should be added to all coldata values (eg xylem in colData$Celltype--> xylem_SRP272727_23_26, xylem_SRP145013, xylem_SRP335180)
+
+Sample effects; most variance is due to differences between datasets, not celltypes
+further verify this by plotting TSNE only for leaf datasets and for shared cell types 
+```{r}
+TSNE_df %>%
+  filter(str_detect(tissue, "Leaf")) %>%      # plot leaf datasets
+  group_by(celltype) %>%                      
+  filter(n_distinct(dataset) > 1) %>%
+  ungroup() %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = dataset)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    ) 
+TSNE_df %>%
+  filter(str_detect(tissue, "Leaf")) %>%      # plot leaf datasets
+  group_by(celltype) %>%
+  filter(n_distinct(dataset) > 1) %>% 
+  ungroup() %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    )
+```
+shared cell types between datasets dont cluster together --> strong dataset effect
+
+same for the two root samples
+```{r}
+TSNE_df %>%
+  filter(str_detect(tissue, "Root")) %>%      # plot leaf datasets
+  group_by(celltype) %>%                      
+  filter(n_distinct(dataset) > 1) %>%
+  ungroup() %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = dataset)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    ) 
+TSNE_df %>%
+  filter(str_detect(tissue, "Root")) %>%      # plot leaf datasets
+  group_by(celltype) %>%
+  filter(n_distinct(dataset) > 1) %>% 
+  ungroup() %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    )
+```
+
+batch correction
+```{r}
+set.seed(42)
+test <- correctExperiments(
+  sce, 
+  batch = sce$Dataset,
+  subset.row = chosen.hvgs,
+  PARAM = # dont understand this one yet
+)
+```
+
+
+
 
 TO DO: 
-- filter datasets: already done on celltype, genotype and condition: check whether there's additional stuff that needs to be thrown out
-- integrate all data sets into one `SingleCellExperiment` object while taking potential batch effects into account
-- make matrix aggregating counts per celltype by mean, median, sum
 
-- put unzip block into if statement
-- investigate what n_experiments is (see line 56)
+- filter datasets: already done on celltype, genotype and condition: check whether there's additional stuff that needs to be thrown out
+- take batch effects into account
+- make matrix aggregating counts per celltype by mean, median, sum
+- investigate what n_experiments is (see line 56), if these are multiple samples within each dataset we might have to correct for batch effects within each dataset aswell
+
+
+
+- explain violin plot
+- additional data visualization plots?
+- within dataset quality control plots (empty droplets, doublets, low quality droplets); see tutorial or stat genomics
+- tidy code and comments
 
 
 
