@@ -32,8 +32,7 @@ if (FALSE) {
   files <- list.files(path = data_dir, pattern = "\\.h5ad\\.gz$", full.names = TRUE)
   for (f in files) {
     gunzip(f, overwrite = TRUE, remove = FALSE)   # removes .gz and leaves .h5ad
-  }
-  print("unzipped files")
+    }
   }
 
 ```
@@ -142,7 +141,7 @@ for (i in 1:length(sce_list)) {
   plot <- plotReducedDim(sce_list[[i]], dimred = "X_umap", colour_by = "Celltype") +
     ggtitle(names(sce_list[i]))
   print(plot)
-} # haven't checked if this code works
+} 
 ```
 
 
