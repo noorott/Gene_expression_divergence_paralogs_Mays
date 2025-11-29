@@ -16,6 +16,7 @@ library(scuttle)
 library(scater)
 library(scran)
 library(batchelor)
+library(DropletUtils)
 ```
 
 ###################
@@ -173,7 +174,7 @@ ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
 ## Data Wrangling ##
 ####################
 
-## filtering
+## filtering of bad genotypes, celltypes and conditions
 ```{r}
 bad_celltypes <- c("Unknow", 
                    "Contamination")
@@ -195,6 +196,43 @@ sce_list <- lapply(sce_list, function(sce) {
 Kn1-O/+ is some mutant line from what i understand from paper
 - SRP335180: 2 conditions: nitrate+ and nitrate- plants 
 (grown in medium with or without nitrate); only use nitrate+ since this seems the normal condition?
+
+
+## filtering of empty droplets
+
+```{r}
+plots <- lapply(seq_along(sce_list), function(i) {
+    sce <- sce_list[[i]]
+    # Compute barcode ranks
+    bcrank <- barcodeRanks(assay(sce, "X"))
+    # Unique points for plotting speed
+    uniq <- !duplicated(bcrank$rank)
+    # Data frame for cutoff lines
+    line_df <- data.frame(
+        cutoff = names(metadata(bcrank)),
+        value  = unlist(metadata(bcrank))
+    )
+    # Create plot
+    p <- ggplot(bcrank[uniq, ], aes(rank, total)) +
+        geom_point() +
+        geom_hline(
+            data = line_df,
+            aes(color = cutoff, yintercept = value),
+            lty = 2
+        ) +
+        scale_x_log10() +
+        scale_y_log10() +
+        labs(
+            title = paste("Barcode Ranks:", names(sce_list)[i]),
+            y = "Total UMI count"
+        )
+    p
+})
+
+# Print all plots
+for (p in plots) print(p)
+```
+=> filtering of empty droplets is already done
 
 
 ## Combining seperate SingleCellExperiments into 1 object
