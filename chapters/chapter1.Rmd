@@ -17,6 +17,7 @@ library(scater)
 library(scran)
 library(batchelor)
 library(DropletUtils)
+library(Rtsne)
 ```
 
 ###################
@@ -239,6 +240,56 @@ for (p in plots) print(p)
 I wanted to use PerQuality metrics to check if there are droplets with low qualtiy:
 too much mitochondrial DNA too low detected genes and/or features4But can't really find what DNA is mitochondrial
 
+## Normalisation
+
+```{r}
+check_normalization_sparse <- function(sce) {
+  
+  vals <- assay(sce, "X")
+  
+  # Check if the matrix is sparse
+  if (inherits(vals, "dgCMatrix")) {
+    # check if all values are integers efficiently on sparse matrix
+    # only check non-zero entries (zero entries are integers by definition)
+    is_integer <- all(vals@x == floor(vals@x))
+  } else {
+    # dense matrix fallback
+    is_integer <- all(vals == floor(vals))
+  }
+  
+  # check for size factors
+  sf_present <- !is.null(sizeFactors(sce))
+  
+  # summary output
+  list(
+    is_integer = is_integer,
+    size_factors_present = sf_present,
+    normalization_guess = if (is_integer & !sf_present) {
+      "raw counts / not normalized"
+    } else if (!is_integer & sf_present) {
+      "likely normalized (logcounts or scaled)"
+    } else if (!is_integer & !sf_present) {
+      "decimal values but no size factors (maybe log-transformed only)"
+    } else if (is_integer & sf_present) {
+      "integer counts but size factors present (needs normalization?)"
+    } else {
+      "uncertain"
+    }
+  )
+}
+
+# Apply to all SCEs in sce_list
+norm_status <- lapply(names(sce_list), function(nm) {
+  status <- check_normalization_sparse(sce_list[[nm]])
+  c(SCE = nm, status)
+})
+
+# Convert to data frame
+norm_df <- do.call(rbind, lapply(norm_status, function(x) as.data.frame(t(x), stringsAsFactors=FALSE)))
+norm_df
+```
+
+
 
 ## Combining seperate SingleCellExperiments into 1 object
 
@@ -418,20 +469,135 @@ TSNE_df %>%
     )
 ```
 
-batch correction
+## Batch correction
 ```{r}
 set.seed(42)
-test <- correctExperiments(
-  sce, 
+merged <- correctExperiments(
+  sce,
   batch = sce$Dataset,
-  subset.row = chosen.hvgs,
-  PARAM = # dont understand this one yet
+  assay.type = "logcounts" ## Maybe we do need a PARAM parameter? 
 )
 ```
 
+```{r}
+merged
+```
+-> reconstructed assay is batch effect corrected based on dataset
+## TSNE on corrected data
+
+```{r}
+pcs <- reducedDims(merged)$corrected
+```
+
+```{r}
+# informative of the biological structure of the data
+dec <- modelGeneVar(merged, block = merged$Dataset) # decomposition of variance
+chosen.hvgs <- dec$bio > 0                    # select genes with biological variance among datasets
+
+# saving because runTSNE takes long
+if (FALSE) {
+  merged <- runPCA(merged, subset_row = chosen.hvgs, ntop = 1000)
+  merged <- runTSNE(merged, dimred = "PCA")
+  saveRDS(sce, file = "corrected_RedDim.rds")
+} else {
+  sce <- readRDS("corrected_RedDim.rds")
+}
+```
 
 
+```{r}
+#set.seed(42)
+#tsne_out <- Rtsne(
+#  pcs,
+#  perplexity = 100,       
+#  pca = FALSE,           
+#  verbose = TRUE
+#)
 
+# Add t-SNE coordinates reduceddims
+#reducedDims(merged)$TSNE <- tsne_out$Y
+```
+-> what is the difference between those two methods?
+```{r}
+TSNE_df <- data.frame(
+  TSNE1 = reducedDims(merged)$TSNE[,1],
+  TSNE2 = reducedDims(merged)$TSNE[,2],
+  celltype = merged$Celltype, 
+  dataset = merged$Dataset,
+  tissue = merged$Tissue
+)
+```
+
+General TSNE plot
+```{r}
+TSNE_df %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = dataset)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    )
+
+TSNE_df %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    scale_color_manual(values = color_vec) +
+    labs(x = "TSNE1", y = "TSNE1") +
+    guides(                                     # separate aes for legend dots
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    ) +
+    theme(
+      legend.text = element_text(size = 8),     # textsize of legend elements
+      legend.key.size = unit(0.3, "cm"))        # boxsize of legend elements
+```
+```{r}
+TSNE_df %>%
+  filter(str_detect(tissue, "Leaf")) %>%      # plot leaf datasets
+  group_by(celltype) %>%                      
+  filter(n_distinct(dataset) > 1) %>%
+  ungroup() %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = dataset)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    ) 
+TSNE_df %>%
+  filter(str_detect(tissue, "Leaf")) %>%      # plot leaf datasets
+  group_by(celltype) %>%
+  filter(n_distinct(dataset) > 1) %>% 
+  ungroup() %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    )
+```
+```{r}
+TSNE_df %>%
+  filter(str_detect(tissue, "Root")) %>%      # plot leaf datasets
+  group_by(celltype) %>%                      
+  filter(n_distinct(dataset) > 1) %>%
+  ungroup() %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = dataset)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    ) 
+TSNE_df %>%
+  filter(str_detect(tissue, "Root")) %>%      # plot leaf datasets
+  group_by(celltype) %>%
+  filter(n_distinct(dataset) > 1) %>% 
+  ungroup() %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    )
+```
 TO DO: 
 
 - filter datasets: already done on celltype, genotype and condition: check whether there's additional stuff that needs to be thrown out
