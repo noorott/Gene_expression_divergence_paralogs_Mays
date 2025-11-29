@@ -234,6 +234,11 @@ for (p in plots) print(p)
 ```
 => filtering of empty droplets is already done
 
+## Quality control
+
+I wanted to use PerQuality metrics to check if there are droplets with low qualtiy:
+too much mitochondrial DNA too low detected genes and/or features4But can't really find what DNA is mitochondrial
+
 
 ## Combining seperate SingleCellExperiments into 1 object
 
