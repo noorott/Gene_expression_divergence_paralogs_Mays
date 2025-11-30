@@ -18,6 +18,8 @@ library(scran)
 library(batchelor)
 library(DropletUtils)
 library(Rtsne)
+library(tidyr) #tidyr was missing
+library(ggplot2) #this was also missing
 ```
 
 ###################
@@ -46,6 +48,8 @@ unziped_files <- list.files(path=data_dir, pattern = "\\.h5ad$", full.names = TR
 ## convert to single cell experiments
 
 ```{r, message = FALSE}
+library(reticulate)
+
 sce_list <- lapply(unziped_files, readH5AD)
 names(sce_list) <- sub("\\.h5ad$", "", basename(unziped_files))
 ```
@@ -73,7 +77,7 @@ sce_info <- sapply(sce_list, function(x){
 
 sce_info["tissue", "SRP325657_2"] <- "Leaf abaxial mature peel" # different suffixes here were different samples (all of leaf abaxial mature peel tissues)
 
-sce_info <- apply(sce_info, c(1,2), function(x) unlist(x)) # couldn't figure out how to unlist cells already in sce_info creation
+sce_info <- apply(sce_info, c(1,2), function(x) as.character(x)) # couldn't figure out how to unlist cells already in sce_info creation --> everything is as a character now, if needed later we can change the numbers to numeric values i think? 
 sce_info <- as.data.frame(sce_info)
 print(sce_info)
 ```
@@ -81,7 +85,7 @@ print(sce_info)
 ```{r}
 # transfer into tidy format for ggplot visualization
 sce_info$stat <- rownames(sce_info)
-sce_info_tidy <- sce_info %>%
+sce_info_tidy <- sce_info |>
   pivot_longer(cols = -stat, names_to = "sample", values_to = "value")
 ```
 
@@ -113,7 +117,7 @@ cell_types <- as.data.frame(cell_types)
 cell_types
 ```
 Problems
-- contamination and unknow
+- contamination and unknown
 - SRP145013:
     - root pith, xylem part of root stele
 - SRP224648 and SRP281914: only 2 celltypes; not really enough to define REB
@@ -193,10 +197,10 @@ sce_list <- lapply(sce_list, function(sce) {
 ```
 - SRP417893: two genotypes: B73 and B73 (ns); only use WT
 (B73 (ns): double mutations in the redundant maize Wox3 homologs narrow sheath1 (Ns1) and narrow sheath2 (Ns2) delete the marginal domain, resulting in narrow leaves that fail to form a sheathing leaf base)
-- SRP266308_1: 2 conditions: Kn1-O/+  and normal cells; only use normal cells?
+- SRP266308_1: 2 conditions: Kn1-O/+  and normal cells; only use normal cells? 
 Kn1-O/+ is some mutant line from what i understand from paper
 - SRP335180: 2 conditions: nitrate+ and nitrate- plants 
-(grown in medium with or without nitrate); only use nitrate+ since this seems the normal condition?
+(grown in medium with or without nitrate); only use nitrate+ since this seems the normal condition? if you leave both conditions, you can also take into account wether the plant is stressed or not, but i do not know how relevant that is for the research here and if there will be enough data to do that 
 
 
 ## filtering of empty droplets
@@ -251,7 +255,7 @@ check_normalization_sparse <- function(sce) {
   if (inherits(vals, "dgCMatrix")) {
     # check if all values are integers efficiently on sparse matrix
     # only check non-zero entries (zero entries are integers by definition)
-    is_integer <- all(vals@x == floor(vals@x))
+    is_integer <- all(vals@x == floor(vals@x)) 
   } else {
     # dense matrix fallback
     is_integer <- all(vals == floor(vals))
@@ -286,7 +290,9 @@ norm_status <- lapply(names(sce_list), function(nm) {
 
 # Convert to data frame
 norm_df <- do.call(rbind, lapply(norm_status, function(x) as.data.frame(t(x), stringsAsFactors=FALSE)))
+norm_df_unlisted <- as.data.frame(apply(norm_df, c(1, 2), FUN = function(x) as.character(x)))
 norm_df
+norm_df_unlisted
 ```
 
 
@@ -384,6 +390,12 @@ color_vec <- c("#5A5156", "#E4E1E3", "#FBE426", "#F6222E", "#FE00FA", "#16FF32",
                "#B10DA1", "#3B00FB", "#1CBE4F", "#FA0087", "#333333", "#F7E1A0", 
                "#C075A6", "#AAF400", "#BDCDFF", "#822E1C", "#B5EFB5", 
                "#7ED7D1", "#1C7F93", "#D85FF7", "#683B79", "#66B0FF")
+color_vec36 <- c("#5A5156", "#E4E1E3", "#FBE426", "#F6222E", "#FE00FA", "#16FF32", "#3283FE", 
+               "#FEAF16", "#B00068", "#1CFFCE", "#90AD1C", "#2ED9FF", "#DEA0FD", 
+               "#AA0DFE", "#F8A19F", "#325A9B", "#C4451C", "#1C8356", "#85660D", 
+               "#B10DA1", "#3B00FB", "#1CBE4F", "#FA0087", "#333333", "#F7E1A0", 
+               "#C075A6", "#AAF400", "#BDCDFF", "#822E1C", "#B5EFB5", 
+               "#7ED7D1", "#1C7F93", "#D85FF7", "#683B79","#000000", "#66B0FF")
 
 TSNE_df <- as.data.frame(reducedDim(sce, "TSNE")) %>%  # make df from UMAP coordinates
   mutate(celltype = colData(sce)$Celltype) %>% # add celltype
@@ -404,8 +416,8 @@ TSNE_df %>%
 TSNE_df %>%
   ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
     geom_point(size = 0.01, alpha = 0.1) +
-    scale_color_manual(values = color_vec) +
-    labs(x = "TSNE1", y = "TSNE1") +
+    scale_color_manual(values = color_vec36) +
+    labs(x = "TSNE1", y = "TSNE2") +
     guides(                                     # separate aes for legend dots
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     ) +
@@ -541,8 +553,8 @@ TSNE_df %>%
 TSNE_df %>%
   ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
     geom_point(size = 0.01, alpha = 0.1) +
-    scale_color_manual(values = color_vec) +
-    labs(x = "TSNE1", y = "TSNE1") +
+    scale_color_manual(values = color_vec36) +
+    labs(x = "TSNE1", y = "TSNE2") +
     guides(                                     # separate aes for legend dots
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     ) +
