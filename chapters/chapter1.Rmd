@@ -150,6 +150,9 @@ for (i in 1:length(sce_list)) {
 } 
 ```
 
+#####################
+## Quality control ##
+#####################
 
 ## Quality control of datasets
 
@@ -173,11 +176,6 @@ ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
   )
 ```
 
-
-
-####################
-## Data Wrangling ##
-####################
 
 ## filtering of bad genotypes, celltypes and conditions
 ```{r}
@@ -295,7 +293,9 @@ norm_df
 norm_df_unlisted
 ```
 
-
+####################
+## Data Wrangling ##
+####################
 
 ## Combining seperate SingleCellExperiments into 1 object
 
@@ -612,11 +612,10 @@ TSNE_df %>%
 ```
 TO DO: 
 
-- filter datasets: already done on celltype, genotype and condition: check whether there's additional stuff that needs to be thrown out
-- take batch effects into account
+- Check if normalisation is still needed
+- check batch effects
 - make matrix aggregating counts per celltype by mean, median, sum
 - investigate what n_experiments is (see line 56), if these are multiple samples within each dataset we might have to correct for batch effects within each dataset aswell
-
 
 
 - explain violin plot
