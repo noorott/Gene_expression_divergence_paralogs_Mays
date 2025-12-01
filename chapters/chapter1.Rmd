@@ -21,6 +21,7 @@ library(DropletUtils)
 library(Rtsne)
 library(tidyr) #tidyr was missing
 library(ggplot2) #this was also missing
+library(DelayedArray)
 ```
 
 ###################
@@ -165,9 +166,10 @@ ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
   scale_fill_manual(values= palette.colors()) +
   scale_y_log10() +
   coord_flip() +
+  labs(y = "Number of expressed genes") +
   theme_bw() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)
+    panel.grid = element_blank(),
   )
 ```
 -> We see that for example the leaf datasets are comparable in expressed genes even though they are two different datasets
@@ -243,8 +245,35 @@ for (p in plots) print(p)
 
 ## Quality control
 
-I wanted to use PerQuality metrics to check if there are droplets with low qualtiy:
-too much mitochondrial DNA too low detected genes and/or features4But can't really find what DNA is mitochondrial
+Mitochondrial DNA is also already filtered out
+
+## Mean-variance relationship
+
+```{r}
+for (name in names(sce_list)) {
+  sce <- sce_list[[name]]
+  
+  mat <- DelayedArray(assay(sce, "X"))
+  gene_means <- rowMeans(mat)
+  gene_vars  <- rowVars(mat)
+  
+  # Free memory immediately after use
+  rm(mat)
+  gc()
+  
+  df <- data.frame(mean = gene_means, variance = gene_vars)
+  
+  p <- ggplot(df, aes(x = mean, y = variance)) +
+    geom_point(alpha = 0.6, size = 0.7) +
+    ggtitle(paste("Mean–Variance relationship:", name)) +
+    theme_bw()
+  
+  print(p)
+  # Free df as well
+  rm(df, gene_means, gene_vars, p)
+  gc()
+}
+```
 
 ## Normalisation
 
