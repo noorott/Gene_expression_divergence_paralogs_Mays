@@ -170,12 +170,15 @@ df <- map_df(names(sce_list), function(name) {
 
 ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
   geom_violin(trim = FALSE) +
+  scale_fill_manual(values= palette.colors()) +
   theme_bw() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
 ```
-
+=> log transform y-axis
+add more descirptive title,
+flip axis
 
 ## filtering of bad genotypes, celltypes and conditions
 ```{r}
