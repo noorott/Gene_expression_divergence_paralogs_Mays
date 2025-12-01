@@ -12,6 +12,7 @@ library(R.utils)
 library(here)
 library(tidyverse)
 library(scales)
+library(reticulate)
 library(scuttle)
 library(scater)
 library(scran)
@@ -48,8 +49,6 @@ unziped_files <- list.files(path=data_dir, pattern = "\\.h5ad$", full.names = TR
 ## convert to single cell experiments
 
 ```{r, message = FALSE}
-library(reticulate)
-
 sce_list <- lapply(unziped_files, readH5AD)
 names(sce_list) <- sub("\\.h5ad$", "", basename(unziped_files))
 ```
@@ -149,13 +148,6 @@ for (i in 1:length(sce_list)) {
   print(plot)
 } 
 ```
-
-#####################
-## Quality control ##
-#####################
-
-## Quality control of datasets
-
 ```{r}
 df <- map_df(names(sce_list), function(name) {
   sce <- sce_list[[name]]
@@ -171,14 +163,23 @@ df <- map_df(names(sce_list), function(name) {
 ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
   geom_violin(trim = FALSE) +
   scale_fill_manual(values= palette.colors()) +
+  scale_y_log10() +
+  coord_flip() +
   theme_bw() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
 ```
-=> log transform y-axis
+-> We see that for example the leaf datasets are comparable in expressed genes even though they are two different datasets
 add more descirptive title,
 flip axis
+
+#####################
+## Quality control ##
+#####################
+
+## Quality control of datasets
+
 
 ## filtering of bad genotypes, celltypes and conditions
 ```{r}
