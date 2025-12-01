@@ -510,7 +510,7 @@ chosen.hvgs <- dec$bio > 0                    # select genes with biological var
 if (FALSE) {
   merged <- runPCA(merged, subset_row = chosen.hvgs, ntop = 1000)
   merged <- runTSNE(merged, dimred = "PCA")
-  saveRDS(sce, file = "corrected_RedDim.rds")
+  saveRDS(merged, file = "corrected_RedDim.rds")
 } else {
   sce <- readRDS("corrected_RedDim.rds")
 }
