@@ -308,7 +308,7 @@ for (name in names(sce_list)) {
 
 => Data is not logtransformed/normalised yet 
 
-## Normalisation
+## Normalisation based on quickclustering
 
 Quickcluster function:
 param method = String specifying the clustering method to use. "hclust" uses hierarchical clustering while "igraph" uses graph-based clustering.
@@ -337,7 +337,7 @@ sce_list <- lapply(sce_list, function(sce) {
 
 
 ```{r}
-saveRDS(sce_list, file = "normalised_sce_list.rds")
+saveRDS(sce_list, file = "normalised_sce_list_quickcluster.rds")
 ```
 
 ```{r}
@@ -358,33 +358,9 @@ sce_list <- readRDS("normalised_sce_list.rds")
 assays(sce_list[[1]])
 ```
 
-## Check Mean-variance relationship again
+## normalisation based on celltype
 
-```{r}
-for (name in names(sce_list)) {
-  sce <- sce_list[[name]]
-  
-  mat <- DelayedArray(assay(sce, "X"))
-  gene_means <- rowMeans(mat)
-  gene_vars  <- rowVars(mat)
-  
-  # Free memory immediately after use
-  rm(mat)
-  gc()
-  
-  df <- data.frame(mean = gene_means, variance = gene_vars)
-  
-  p <- ggplot(df, aes(x = mean, y = variance)) +
-    geom_point(alpha = 0.6, size = 0.7) +
-    ggtitle(paste("Mean–Variance relationship:", name)) +
-    theme_bw()
-  
-  print(p)
-  # Free df as well
-  rm(df, gene_means, gene_vars, p)
-  gc()
-}
-```
+
 
 
 ####################
