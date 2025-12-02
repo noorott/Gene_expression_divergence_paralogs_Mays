@@ -247,7 +247,7 @@ rm(plots, p)
 ```
 => filtering of empty droplets is already done
 
-## Check if counts still integers
+## Check if counts are integers
 
 Mitochondrial DNA is also already filtered out (see paper scPlantDB)
 
@@ -298,6 +298,8 @@ for (name in names(sce_list)) {
   p <- ggplot(df, aes(x = mean, y = variance)) +
     geom_point(alpha = 0.6, size = 0.7) +
     ggtitle(paste("Mean–Variance relationship:", name)) +
+    scale_y_log10() + 
+    scale_x_log10() +
     theme_bw()
   
   print(p)
@@ -307,8 +309,9 @@ for (name in names(sce_list)) {
 ```
 
 => Data is not logtransformed/normalised yet 
-
+#####
 ## Normalisation based on quickclustering
+#####
 
 Quickcluster function:
 param method = String specifying the clustering method to use. "hclust" uses hierarchical clustering while "igraph" uses graph-based clustering.
@@ -357,11 +360,46 @@ for (name in names(sce_list)) {
 sce_list <- readRDS("normalised_sce_list.rds")
 assays(sce_list[[1]])
 ```
+#####
+### normalisation based on celltype
+#####
+```{r}
+set.seed(42)
+sce_list <- lapply(sce_list, function(sce) {
+  cl <- sce$Celltype
+  sce <- computeSumFactors(sce, clusters = cl, assay.type = "X")
+  
+  plot(librarySizeFactors(sce, assay.type = "X"), sizeFactors(sce), xlab="Library size factor",
+       ylab="Deconvolution size factor", log='xy', pch=16,
+       col=as.integer(factor(cl)))
+  abline(a=0, b=1, col="red")
+  
+  sce
+})
+```
+```{r}
+sce_list <- lapply(sce_list, function(sce) {
+  logNormCounts(sce, assay.type="X")
+})
+```
 
-## normalisation based on celltype
 
+```{r}
+saveRDS(sce_list, file = "normalised_sce_list_celltype.rds")
+```
 
-
+```{r}
+for (name in names(sce_list)) {
+  sce <- sce_list[[name]]
+  dec <- modelGeneVar(sce)
+  varfit <- metadata(dec)
+  plot(varfit$mean, varfit$var, 
+       xlab="Mean of log-expression",
+      ylab="Variance of log-expression")
+  curve(varfit$trend(x), col="dodgerblue", add=TRUE, lwd=2)
+  rm(sce, dec, varfit)
+  }
+```
 
 ####################
 ## Data Wrangling ##
