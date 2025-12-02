@@ -19,8 +19,8 @@ library(scran)
 library(batchelor)
 library(DropletUtils)
 library(Rtsne)
-library(tidyr) #tidyr was missing
-library(ggplot2) #this was also missing
+library(tidyr) 
+library(ggplot2) 
 library(DelayedArray)
 ```
 
@@ -47,14 +47,12 @@ if (FALSE) {
 unziped_files <- list.files(path=data_dir, pattern = "\\.h5ad$", full.names = TRUE)
 ```
 
-## convert to single cell experiments
+## convert to list of single cell experiments
 
 ```{r, message = FALSE}
 sce_list <- lapply(unziped_files, readH5AD)
 names(sce_list) <- sub("\\.h5ad$", "", basename(unziped_files))
 ```
-=> sce_list is now a list of single cell experiments
-
 
 ##########################
 ## Datasets Exploration ##
@@ -149,6 +147,8 @@ for (i in 1:length(sce_list)) {
   print(plot)
 } 
 ```
+
+Violin plot of number of expressed genes per dataset
 ```{r}
 df <- map_df(names(sce_list), function(name) {
   sce <- sce_list[[name]]
@@ -174,14 +174,12 @@ ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
 ```
 -> We see that for example the leaf datasets are comparable in expressed genes even though they are two different datasets
 add more descirptive title,
-flip axis
 
 #####################
 ## Quality control ##
 #####################
 
 ## Quality control of datasets
-
 
 ## filtering of bad genotypes, celltypes and conditions
 ```{r}
@@ -198,6 +196,8 @@ sce_list <- lapply(sce_list, function(sce) {
           !colData(sce)$Condition %in% bad_conditions
   sce[, keep]
 })
+
+rm(bad_celltypes, bad_genotypes, bad_conditions)
 ```
 - SRP417893: two genotypes: B73 and B73 (ns); only use WT
 (B73 (ns): double mutations in the redundant maize Wox3 homologs narrow sheath1 (Ns1) and narrow sheath2 (Ns2) delete the marginal domain, resulting in narrow leaves that fail to form a sheathing leaf base)
@@ -214,14 +214,14 @@ plots <- lapply(seq_along(sce_list), function(i) {
     sce <- sce_list[[i]]
     # Compute barcode ranks
     bcrank <- barcodeRanks(assay(sce, "X"))
-    # Unique points for plotting speed
+
     uniq <- !duplicated(bcrank$rank)
     # Data frame for cutoff lines
     line_df <- data.frame(
         cutoff = names(metadata(bcrank)),
         value  = unlist(metadata(bcrank))
     )
-    # Create plot
+
     p <- ggplot(bcrank[uniq, ], aes(rank, total)) +
         geom_point() +
         geom_hline(
@@ -229,6 +229,8 @@ plots <- lapply(seq_along(sce_list), function(i) {
             aes(color = cutoff, yintercept = value),
             lty = 2
         ) +
+      
+
         scale_x_log10() +
         scale_y_log10() +
         labs(
@@ -240,14 +242,123 @@ plots <- lapply(seq_along(sce_list), function(i) {
 
 # Print all plots
 for (p in plots) print(p)
+
+rm(plots, p)
 ```
 => filtering of empty droplets is already done
 
-## Quality control
+## Check if counts still integers
 
-Mitochondrial DNA is also already filtered out
+Mitochondrial DNA is also already filtered out (see paper scPlantDB)
+
+```{r}
+check_normalization_sparse <- function(sce) {
+  
+  vals <- assay(sce, "X")
+  is_integer <- all(vals@x == floor(vals@x)) 
+  
+  # check for size factors
+  sf_present <- !is.null(sizeFactors(sce))
+  # output
+  list(
+    is_integer = is_integer,
+    size_factors_present = sf_present
+  )
+}
+
+# Apply to all SCEs in sce_list
+norm_status <- lapply(names(sce_list), function(nm) {
+  status <- check_normalization_sparse(sce_list[[nm]])
+})
+
+# Convert to data frame
+norm_df <- do.call(rbind, lapply(norm_status, function(x) as.data.frame(t(x), stringsAsFactors=FALSE)))
+norm_df_unlisted <- as.data.frame(apply(norm_df, c(1, 2), FUN = function(x) as.character(x)))
+norm_df_unlisted
+
+rm(norm_df, norm_df_unlisted)
+```
 
 ## Mean-variance relationship
+
+```{r}
+for (name in names(sce_list)) {
+  sce <- sce_list[[name]]
+  
+  mat <- DelayedArray(assay(sce, "X"))
+  gene_means <- rowMeans(mat)
+  gene_vars  <- rowVars(mat)
+  
+  # Free memory immediately after use
+  rm(mat)
+  gc()
+  
+  df <- data.frame(mean = gene_means, variance = gene_vars)
+  
+  p <- ggplot(df, aes(x = mean, y = variance)) +
+    geom_point(alpha = 0.6, size = 0.7) +
+    ggtitle(paste("Mean–Variance relationship:", name)) +
+    theme_bw()
+  
+  print(p)
+  # Free df as well
+  rm(df, gene_means, gene_vars, p)
+}
+```
+
+=> Data is not logtransformed/normalised yet 
+
+## Normalisation
+
+Quickcluster function:
+param method = String specifying the clustering method to use. "hclust" uses hierarchical clustering while "igraph" uses graph-based clustering.
+
+Do quickcluster for all singleCellExperiments then compute sizefactors
+```{r}
+set.seed(42)
+sce_list <- lapply(sce_list, function(sce) {
+  cl <- quickCluster(sce, assay.type = "X")
+  sce <- computeSumFactors(sce, clusters = cl, assay.type = "X")
+  
+  plot(librarySizeFactors(sce, assay.type = "X"), sizeFactors(sce), xlab="Library size factor",
+       ylab="Deconvolution size factor", log='xy', pch=16,
+       col=as.integer(factor(cl)))
+  abline(a=0, b=1, col="red")
+  
+  sce
+})
+```
+
+```{r}
+sce_list <- lapply(sce_list, function(sce) {
+  logNormCounts(sce, assay.type="X")
+})
+```
+
+
+```{r}
+saveRDS(sce_list, file = "normalised_sce_list.rds")
+```
+
+```{r}
+for (name in names(sce_list)) {
+  sce <- sce_list[[name]]
+  dec <- modelGeneVar(sce)
+  varfit <- metadata(dec)
+  plot(varfit$mean, varfit$var, 
+       xlab="Mean of log-expression",
+      ylab="Variance of log-expression")
+  curve(varfit$trend(x), col="dodgerblue", add=TRUE, lwd=2)
+  rm(sce, dec, varfit)
+  }
+```
+
+```{r}
+sce_list <- readRDS("normalised_sce_list.rds")
+assays(sce_list[[1]])
+```
+
+## Check Mean-variance relationship again
 
 ```{r}
 for (name in names(sce_list)) {
@@ -275,56 +386,6 @@ for (name in names(sce_list)) {
 }
 ```
 
-## Normalisation
-
-```{r}
-check_normalization_sparse <- function(sce) {
-  
-  vals <- assay(sce, "X")
-  
-  # Check if the matrix is sparse
-  if (inherits(vals, "dgCMatrix")) {
-    # check if all values are integers efficiently on sparse matrix
-    # only check non-zero entries (zero entries are integers by definition)
-    is_integer <- all(vals@x == floor(vals@x)) 
-  } else {
-    # dense matrix fallback
-    is_integer <- all(vals == floor(vals))
-  }
-  
-  # check for size factors
-  sf_present <- !is.null(sizeFactors(sce))
-  
-  # summary output
-  list(
-    is_integer = is_integer,
-    size_factors_present = sf_present,
-    normalization_guess = if (is_integer & !sf_present) {
-      "raw counts / not normalized"
-    } else if (!is_integer & sf_present) {
-      "likely normalized (logcounts or scaled)"
-    } else if (!is_integer & !sf_present) {
-      "decimal values but no size factors (maybe log-transformed only)"
-    } else if (is_integer & sf_present) {
-      "integer counts but size factors present (needs normalization?)"
-    } else {
-      "uncertain"
-    }
-  )
-}
-
-# Apply to all SCEs in sce_list
-norm_status <- lapply(names(sce_list), function(nm) {
-  status <- check_normalization_sparse(sce_list[[nm]])
-  c(SCE = nm, status)
-})
-
-# Convert to data frame
-norm_df <- do.call(rbind, lapply(norm_status, function(x) as.data.frame(t(x), stringsAsFactors=FALSE)))
-norm_df_unlisted <- as.data.frame(apply(norm_df, c(1, 2), FUN = function(x) as.character(x)))
-norm_df
-norm_df_unlisted
-```
 
 ####################
 ## Data Wrangling ##
