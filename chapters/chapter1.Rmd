@@ -438,6 +438,7 @@ for (name in names(sce_list)) {
 ## reading RDS
 
 Choose Quickcluster based or cell type based
+Data set aggregation is done with cell type based
 ```{r}
 sce_list <- readRDS("normalised_sce_list_quickcluster.rds")
 ```
@@ -494,9 +495,9 @@ Dataset SRP224648 has X_tsne in addition to X_umap in reduced dimension slot
 Remove tsne from Dataset SRP224648
 ```{r}
 # back up tsne in separate variable for later if needed
-tsne_SRP224648 <- reducedDims(sce_list$SRP224648)$X_tsne
+tsne_SRP224648 <- reducedDims(sce_list$SRP224648)$TSNE
 
-reducedDims(sce_list$SRP224648)$X_tsne <- NULL
+reducedDims(sce_list$SRP224648)$TSNE <- NULL
 names(reducedDims(sce_list$SRP224648))
 ```
 Now everything aligns and sce list can be collapsed into one sce object
@@ -512,26 +513,28 @@ sce <- do.call(cbind, sce_list)
 rm(sce_list)
 
 # more meaningfull name for assay
-names(assays(sce)) <- "logcounts"
+#names(assays(sce)) <- "logcounts"
 ```
+The different datasets are now combined into one single cell experiment object. To remove technical variation between datasets, batch correction should be performed
 
+## Pre-correction Visualization with TSNE plots
 
-## batch effect 
+Before applying batch correction is performed, the data is visualized with TSNE plots. This way the effect of batch correction can be examined trough comparison
 
-Visualization first
 ```{r}
 # Feature selection for dimensionality reduction: want genes that are 
 # informative of the biological structure of the data
 dec <- modelGeneVar(sce, block = sce$Dataset) # decomposition of variance
 chosen.hvgs <- dec$bio > 0                    # select genes with biological variance among datasets
-
+```
+```{r}
 # saving because runTSNE takes long
 if (FALSE) {
   sce <- runPCA(sce, subset_row = chosen.hvgs, ntop = 1000)
   sce <- runTSNE(sce, dimred = "PCA")
-  saveRDS(sce, file = "sce_RedDim.rds")
+  saveRDS(sce, file = "uncorrected_sce_RedDim.rds")
 } else {
-  sce <- readRDS("sce_RedDim.rds")
+  sce <- readRDS("uncorrected_sce_RedDim.rds")
 }
 
 sce$Dataset = as.factor(sce$Dataset)
@@ -539,18 +542,12 @@ sce$Dataset = as.factor(sce$Dataset)
 
 making dataframe for TSNE plots
 ```{r}
-color_vec <- c("#5A5156", "#E4E1E3", "#FBE426", "#F6222E", "#FE00FA", "#16FF32", "#3283FE", 
+color_vec <- c("#5A5156", "#E4E1E3", "#F6222E", "#FE00FA", "#16FF32", "#3283FE", 
                "#FEAF16", "#B00068", "#1CFFCE", "#90AD1C", "#2ED9FF", "#DEA0FD", 
-               "#AA0DFE", "#F8A19F", "#325A9B", "#C4451C", "#1C8356", "#85660D", 
+               "#AA0DFE", "#F8A19F", "#325A9B", "#C4451C", "#1C8356", "#B5EFB5", 
                "#B10DA1", "#3B00FB", "#1CBE4F", "#FA0087", "#333333", "#F7E1A0", 
-               "#C075A6", "#AAF400", "#BDCDFF", "#822E1C", "#B5EFB5", 
-               "#7ED7D1", "#1C7F93", "#D85FF7", "#683B79", "#66B0FF")
-color_vec36 <- c("#5A5156", "#E4E1E3", "#FBE426", "#F6222E", "#FE00FA", "#16FF32", "#3283FE", 
-               "#FEAF16", "#B00068", "#1CFFCE", "#90AD1C", "#2ED9FF", "#DEA0FD", 
-               "#AA0DFE", "#F8A19F", "#325A9B", "#C4451C", "#1C8356", "#85660D", 
-               "#B10DA1", "#3B00FB", "#1CBE4F", "#FA0087", "#333333", "#F7E1A0", 
-               "#C075A6", "#AAF400", "#BDCDFF", "#822E1C", "#B5EFB5", 
-               "#7ED7D1", "#1C7F93", "#D85FF7", "#683B79","#000000", "#66B0FF")
+               "#C075A6", "#782AB6", "#AAF400", "#BDCDFF", "#822E1C", "#85660D", 
+               "#7ED7D1", "#1C7F93", "#D85FF7", "#683B79", "#66B0FF", "#FBE426")
 
 TSNE_df <- as.data.frame(reducedDim(sce, "TSNE")) %>%  # make df from UMAP coordinates
   mutate(celltype = colData(sce)$Celltype) %>% # add celltype
@@ -571,7 +568,7 @@ TSNE_df %>%
 TSNE_df %>%
   ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
     geom_point(size = 0.01, alpha = 0.1) +
-    scale_color_manual(values = color_vec36) +
+    scale_color_manual(values = color_vec) +
     labs(x = "TSNE1", y = "TSNE2") +
     guides(                                     # separate aes for legend dots
       color = guide_legend(override.aes = list(size=3, alpha = 1))
@@ -580,7 +577,7 @@ TSNE_df %>%
       legend.text = element_text(size = 8),     # textsize of legend elements
       legend.key.size = unit(0.3, "cm"))        # boxsize of legend elements
 ```
-possible problem: shared celltypes between datasets are taken together (eg xylem). Do we want this? Otherwise a suffix of the dataset should be added to all coldata values (eg xylem in colData$Celltype--> xylem_SRP272727_23_26, xylem_SRP145013, xylem_SRP335180)
+Possible problem: shared celltypes between datasets are taken together (eg xylem). Do we want this? Otherwise a suffix of the dataset should be added to all coldata values (eg xylem in colData$Celltype--> xylem_SRP272727_23_26, xylem_SRP145013, xylem_SRP335180)
 
 Sample effects; most variance is due to differences between datasets, not celltypes
 further verify this by plotting TSNE only for leaf datasets and for shared cell types 
@@ -636,62 +633,84 @@ TSNE_df %>%
     )
 ```
 
+Removing logcounts and reduced dims
+```{r}
+assays(sce) <- assays(sce)["counts"]
+reducedDim(sce, "PCA") <- NULL
+reducedDim(sce, "TSNE") <- NULL
+reducedDim(sce, "UMAP") <- NULL
+```
+
 ## Batch correction
+
+batch correction options:
+
+- **linear modelling**,eg removeBatchEffect from limma, regressBatches from batchelor):
+fits linear model trhough gene expression profile with batch term and then recomputing the observations without the batch effect
+not good because assumes that composition of cell subpopulations is the same across batches
+However, it is possible to take up cell type as factor in linear modelling (design parameter) --> could be good option
+
+- **rescaleBatches** from batchelor
+roughly equivalent to applying linear regression, also assumes constant composition -> not good
+
+- **MNN correction**, eg fastMNN from batchelor
+Finds nearest neighbor cell pairs between different batches --> assumes these cells are from the same biological state. Batch effect is estimated by the difference between these nearest neighbors. Does not assume that the population composition is the same or known beforehand. Key assumption is that the batch effect is orthogonal to the biology, usually reasonable as random vector is likely orthogonal --> could also be good option, but I think that this algorithm wont be optimal as different datasets dont always have shared cell types
+
+
+## Batch correction with linear modelling
+
+One think to keep in mind with this method, is that if a celltypes occurs only in a few batches or/and in low number in those batches the correction will be unstable. 
+Therefore
+
+Visualisation of overlap
 ```{r}
-set.seed(42)
-merged <- correctExperiments(
-  sce,
+
+```
+
+QuickCorrect function performs data set up steps:
+- subsets all batches to common "universe" of features (dont really understand what this means)
+- rescaling and within dataset normalisation to get logcounts
+- feature selection to get hvgs
+and then performs batch correction according to specified PARAM
+```{r}
+set.seed(73928)
+
+correct_lm <- quickCorrect(
+  sce, 
   batch = sce$Dataset,
-  assay.type = "logcounts" ## Maybe we do need a PARAM parameter? 
+  assay.type = "counts",   # expects counts assay not logcounts
+  PARAM = RegressParam(    # use regressBatches as batch correction
+    design = model.matrix(~ 0 + sce$Celltype) # no intercept
+  )
 )
+
+assay(sce, "corrected_lm") <- assay(correct_lm$corrected)
+hvgs <- correct_lm$hvgs
+rm(correct_lm)
 ```
+?maybe do visualisation on correct_lm$dec?
 
+
+Visualisation with TSNEs of batch corrected data
 ```{r}
-merged
-```
--> reconstructed assay is batch effect corrected based on dataset
-## TSNE on corrected data
-
-```{r}
-pcs <- reducedDims(merged)$corrected
-```
-
-```{r}
-# informative of the biological structure of the data
-dec <- modelGeneVar(merged, block = merged$Dataset) # decomposition of variance
-chosen.hvgs <- dec$bio > 0                    # select genes with biological variance among datasets
-
 # saving because runTSNE takes long
-if (FALSE) {
-  merged <- runPCA(merged, subset_row = chosen.hvgs, ntop = 1000)
-  merged <- runTSNE(merged, dimred = "PCA")
-  saveRDS(merged, file = "corrected_RedDim.rds")
+if (TRUE) {
+  sce <- runPCA(sce, exprs_values = "corrected_lm", 
+                subset_row = hvgs, ntop = 1000)
+  sce <- runTSNE(sce, dimred = "PCA")
+  saveRDS(sce, file = "corrected_lm_RedDim.rds")
 } else {
-  sce <- readRDS("corrected_RedDim.rds")
+  sce <- readRDS("corrected_lm_RedDim.rds")
 }
 ```
 
-
-```{r}
-#set.seed(42)
-#tsne_out <- Rtsne(
-#  pcs,
-#  perplexity = 100,       
-#  pca = FALSE,           
-#  verbose = TRUE
-#)
-
-# Add t-SNE coordinates reduceddims
-#reducedDims(merged)$TSNE <- tsne_out$Y
-```
--> what is the difference between those two methods?
 ```{r}
 TSNE_df <- data.frame(
-  TSNE1 = reducedDims(merged)$TSNE[,1],
-  TSNE2 = reducedDims(merged)$TSNE[,2],
-  celltype = merged$Celltype, 
-  dataset = merged$Dataset,
-  tissue = merged$Tissue
+  TSNE1 = reducedDims(sce)$TSNE[,1],
+  TSNE2 = reducedDims(sce)$TSNE[,2],
+  celltype = sce$Celltype, 
+  dataset = sce$Dataset,
+  tissue = sce$Tissue
 )
 ```
 
@@ -742,6 +761,7 @@ TSNE_df %>%
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     )
 ```
+
 ```{r}
 TSNE_df %>%
   filter(str_detect(tissue, "Root")) %>%      # plot leaf datasets
@@ -772,10 +792,10 @@ TSNE_df %>%
 
 TO DO: 
 
-- perform within dataset normalisation 
-- check batch effects
+- make good visualisation: in how many datasets does each celltype occur and in what number; important for linear model (line 665)
+- look further into batch correction methods (see start line 644)
 - make matrix aggregating counts per celltype by mean, median, sum
-- investigate what n_experiments is (see line 56), if these are multiple samples within each dataset we might have to correct for batch effects within each dataset aswell
+- investigate what n_experiments is (see line 56), if these are multiple samples within each dataset we might have to correct for batch effects within each dataset aswell?
 
 
 - additional data visualization plots?
@@ -783,6 +803,14 @@ TO DO:
 - tidy code and comments
 
 
+QUESTIONS:
+
+- why do within dataset normalisation if batch correction methods will use counts assay instead of logcounts assay? just for TSNE plots?
+
+
+```{r}
+sessionInfo()
+```
 
 
 
