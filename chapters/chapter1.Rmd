@@ -24,9 +24,9 @@ library(ggplot2)
 library(DelayedArray)
 ```
 
-###################
+##################
 ## Read in Data ##
-###################
+##################
 
 Setting root directory to files
 ```{r}
@@ -140,7 +140,7 @@ for (i in 1:length(sce_list)) {
   print(plot)
 } 
 ```
-PCA plots of each dataset colored by celltype*
+PCA plot of each data set colored by celltype
 ```{r}
 for (i in 1:length(sce_list)) {
   plot <- plotReducedDim(sce_list[[i]], dimred = "PCA", colour_by = "Celltype") +
@@ -297,7 +297,7 @@ rm(norm_df, norm_df_unlisted)
 ```
 All datasets contain integers and don't have size factors present. 
 
-Check normalisation by plotting mean-variance relationship
+Check if normalisation has already been done by plotting mean-variance relationship
 ```{r}
 for (name in names(sce_list)) {
   sce <- sce_list[[name]]
@@ -325,12 +325,26 @@ for (name in names(sce_list)) {
 }
 rm(sce)
 ```
-Linear relation between the variance in the mean: data is not logtransformed + normalised yet 
+Linear relation between the variance in the mean: data is not logtransformed + normalised yet. This is done ourselves in the next section 
 
 
-#####
-## Normalisation based on quickclustering
-#####
+##################################
+## Within Dataset Normalisation ## 
+##################################
+
+Normalisaton is done by deconvolution:
+- celltypes can have differing library sizes + compositional bias in scRNA-seq
+(--> simple library size norm not valid)
+- dominance of low and zero counts + many genes DE between celltypes
+(--> bulk RNA norm methods problematic)
+
+Counts are pooled from many cells (increases count size) for accurate size factor estimation. These size factors are calculated per cluster to avoid the assumption that most genes are non-DE over the entire population (only assumes that most genes are non DE within clusters). Then size factors are rescaled to be comparable across clusters.
+
+Celltypes can be taken as clusters or clusters can be decided with Quickcluster function:
+
+!don't run again, read in rds at the end!
+
+## Normalisation with clusters from Quickcluster
 
 Quickcluster function:
 param method = String specifying the clustering method to use. "hclust" uses hierarchical clustering while "igraph" uses graph-based clustering.
@@ -339,10 +353,11 @@ Do quickcluster for all singleCellExperiments then compute sizefactors
 ```{r}
 set.seed(42)
 sce_list <- lapply(sce_list, function(sce) {
-  cl <- quickCluster(sce, assay.type = "X")
-  sce <- computeSumFactors(sce, clusters = cl, assay.type = "X")
+  cl <- quickCluster(sce, assay.type = "counts")
+  sce <- computeSumFactors(sce, clusters = cl, assay.type = "counts")
   
-  plot(librarySizeFactors(sce, assay.type = "X"), sizeFactors(sce), xlab="Library size factor",
+  plot(librarySizeFactors(sce, assay.type = "counts"), sizeFactors(sce), 
+       xlab="Library size factor",
        ylab="Deconvolution size factor", log='xy', pch=16,
        col=as.integer(factor(cl)))
   abline(a=0, b=1, col="red")
@@ -351,12 +366,14 @@ sce_list <- lapply(sce_list, function(sce) {
 })
 ```
 
+Size factors are used to log norm transform counts
 ```{r}
 sce_list <- lapply(sce_list, function(sce) {
-  logNormCounts(sce, assay.type="X")
+  logNormCounts(sce, assay.type = "counts")
 })
-```
 
+assayNames(sce_list$SRP145013)
+```
 
 ```{r}
 saveRDS(sce_list, file = "normalised_sce_list_quickcluster.rds")
@@ -368,30 +385,24 @@ for (name in names(sce_list)) {
   dec <- modelGeneVar(sce)
   varfit <- metadata(dec)
   plot(varfit$mean, varfit$var, 
-       xlab="Mean of log-expression",
+      xlab="Mean of log-expression",
       ylab="Variance of log-expression")
   curve(varfit$trend(x), col="dodgerblue", add=TRUE, lwd=2)
   rm(sce, dec, varfit)
   }
 ```
 
-```{r}
-sce_list <- readRDS("normalised_sce_list.rds")
-assays(sce_list[[1]])
-```
-
-
-#####
-### normalisation based on celltype
-#####
+## normalisation based on celltype
+Same but with annotated celltypes as clusters 
 
 ```{r}
 set.seed(42)
 sce_list <- lapply(sce_list, function(sce) {
   cl <- sce$Celltype
-  sce <- computeSumFactors(sce, clusters = cl, assay.type = "X")
+  sce <- computeSumFactors(sce, clusters = cl, assay.type = "counts")
   
-  plot(librarySizeFactors(sce, assay.type = "X"), sizeFactors(sce), xlab="Library size factor",
+  plot(librarySizeFactors(sce, assay.type = "counts"), sizeFactors(sce),
+       xlab="Library size factor",
        ylab="Deconvolution size factor", log='xy', pch=16,
        col=as.integer(factor(cl)))
   abline(a=0, b=1, col="red")
@@ -402,10 +413,9 @@ sce_list <- lapply(sce_list, function(sce) {
 
 ```{r}
 sce_list <- lapply(sce_list, function(sce) {
-  logNormCounts(sce, assay.type="X")
+  logNormCounts(sce, assay.type="counts")
 })
 ```
-
 
 ```{r}
 saveRDS(sce_list, file = "normalised_sce_list_celltype.rds")
@@ -417,16 +427,29 @@ for (name in names(sce_list)) {
   dec <- modelGeneVar(sce)
   varfit <- metadata(dec)
   plot(varfit$mean, varfit$var, 
-       xlab="Mean of log-expression",
+      xlab="Mean of log-expression",
       ylab="Variance of log-expression")
   curve(varfit$trend(x), col="dodgerblue", add=TRUE, lwd=2)
   rm(sce, dec, varfit)
   }
 ```
 
-####################
-## Data Wrangling ##
-####################
+
+## reading RDS
+
+Choose Quickcluster based or cell type based
+```{r}
+sce_list <- readRDS("normalised_sce_list_quickcluster.rds")
+```
+
+```{r}
+sce_list <- readRDS("normalised_sce_list_celltype.rds")
+```
+
+
+##########################
+## Data Set Aggregation ##
+##########################
 
 ## Combining seperate SingleCellExperiments into 1 object
 
