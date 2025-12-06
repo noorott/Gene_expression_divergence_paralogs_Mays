@@ -28,43 +28,35 @@ library(DelayedArray)
 ## Read in Data ##
 ###################
 
+Setting root directory to files
 ```{r}
 data_dir <- here("scRNAseq_data", "zea_mays")
 ```
 
+Getting file directories
 ```{r}
-### Don't run this again if files are already unzipped
-if (FALSE) {
-  files <- list.files(path = data_dir, pattern = "\\.h5ad\\.gz$", full.names = TRUE)
-  for (f in files) {
-    gunzip(f, overwrite = TRUE, remove = FALSE)   # removes .gz and leaves .h5ad
-    }
-  }
-
+files <- list.files(path=data_dir, pattern = "\\.rds$", full.names = TRUE)
 ```
 
+Reading in RDS files into list of single cell experiments
 ```{r}
-unziped_files <- list.files(path=data_dir, pattern = "\\.h5ad$", full.names = TRUE)
+sce_list <- lapply(files, readRDS)
+names(sce_list) <- sub("\\.rds$", "", basename(files))
 ```
 
-## convert to list of single cell experiments
-
-```{r, message = FALSE}
-sce_list <- lapply(unziped_files, readH5AD)
-names(sce_list) <- sub("\\.h5ad$", "", basename(unziped_files))
-```
 
 ##########################
 ## Datasets Exploration ##
 ##########################
 
+Gathering info on the datasets
 ```{r}
 sce_info <- sapply(sce_list, function(x){
   list(
     organ = unique(colData(x)$Organ),
     tissue =  unique(colData(x)$Tissue),
     age = unique(colData(x)$ACE),
-    n_experiments = length(unique(colData(x)$Orig.ident)),  # not really sure what these are (technical replicates, biological replictes, ...?)
+    n_experiments = length(unique(colData(x)$Orig.ident)),  # not really sure what these are (technical replicates, biological replicates, ...?)
     n_cells = ncol(x),
     n_celltypes = length(unique(colData(x)$Celltype)),
     total_genes = nrow(x),
@@ -75,11 +67,12 @@ sce_info <- sapply(sce_list, function(x){
 
 sce_info["tissue", "SRP325657_2"] <- "Leaf abaxial mature peel" # different suffixes here were different samples (all of leaf abaxial mature peel tissues)
 
-sce_info <- apply(sce_info, c(1,2), function(x) as.character(x)) # couldn't figure out how to unlist cells already in sce_info creation --> everything is as a character now, if needed later we can change the numbers to numeric values i think? 
+sce_info <- apply(sce_info, c(1,2), function(x) as.character(x)) 
 sce_info <- as.data.frame(sce_info)
 print(sce_info)
 ```
-## Visualization
+
+Visualization
 ```{r}
 # transfer into tidy format for ggplot visualization
 sce_info$stat <- rownames(sce_info)
@@ -114,10 +107,8 @@ cell_types <- sapply(sce_list, function(x){
 cell_types <- as.data.frame(cell_types)
 cell_types
 ```
-Problems
+Possible problems to keep in mind for downstream analysis:
 - contamination and unknown
-- SRP145013:
-    - root pith, xylem part of root stele
 - SRP224648 and SRP281914: only 2 celltypes; not really enough to define REB
   --> dont use for individual dataset analysis (but do use for total)
 - SRP325657_1: only 3 celltypes
@@ -125,7 +116,7 @@ Problems
 - SRP325657_2: Pavement cell-N and Pavement cell-A	 
     PCs-A: PCs with active anthocyanin biosynthesis
     PCs-N: PCs lacking active anthocyanin biosynthesis
-    natural celltypes (not transformed)
+    natural celltypes (not transformed), so both can be used
 - SRP417893: leaf rim; dubious celltype
     "Here we use single-cell RNA-sequencing analyses to identify a ‘rim’ cell type 
     present at the margins of maize leaf primordia. Cells in the leaf rim have a 
@@ -138,21 +129,31 @@ Problems
   eg SRP272727_23_26; multiple meristem subcategories
   eg SRP266308_1; vascular tissue <-> other; xylem & phloem
   -->
-  
+
+
+
 UMAP plot of each data set colored by cell type
 ```{r}
 for (i in 1:length(sce_list)) {
-  plot <- plotReducedDim(sce_list[[i]], dimred = "X_umap", colour_by = "Celltype") +
-    ggtitle(names(sce_list[i]))
+  plot <- plotReducedDim(sce_list[[i]], dimred = "UMAP", colour_by = "Celltype") +
+    ggtitle(paste(names(sce_list[i])), sce_info["tissue", i])
+  print(plot)
+} 
+```
+PCA plots of each dataset colored by celltype*
+```{r}
+for (i in 1:length(sce_list)) {
+  plot <- plotReducedDim(sce_list[[i]], dimred = "PCA", colour_by = "Celltype") +
+    ggtitle(paste(names(sce_list[i])), sce_info["tissue", i])
   print(plot)
 } 
 ```
 
 Violin plot of number of expressed genes per dataset
-```{r}
+```{r, fig.width=7, fig.height=8}
 df <- map_df(names(sce_list), function(name) {
   sce <- sce_list[[name]]
-  expr <- assay(sce, "X")   # your assay
+  expr <- assay(sce, "counts")   # your assay
 
   tibble(
     dataset = name,
@@ -168,20 +169,52 @@ ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
   coord_flip() +
   labs(y = "Number of expressed genes") +
   theme_bw() +
+  ggtitle("Distribution of number of expressed genes for each dataset") +
   theme(
     panel.grid = element_blank(),
   )
 ```
--> We see that for example the leaf datasets are comparable in expressed genes even though they are two different datasets
-add more descirptive title,
+We see that for example the leaf datasets are comparable in expressed genes even though they are two different datasets
+
 
 #####################
 ## Quality control ##
 #####################
 
-## Quality control of datasets
+## Filtering of unwanted cells 
 
-## filtering of bad genotypes, celltypes and conditions
+Look at present genotypes
+```{r}
+print("Genotypes")
+for (i in 1:9) {
+  cat(names(sce_list)[i], ":", 
+      paste(unique(colData(sce_list[[i]])$Genotype), collapse = ", "), 
+      "\n", 
+      sep =" ")
+}
+```
+SRP417893: two genotypes: B73 and B73 (ns); only use WT
+(B73 (ns): double mutations in the redundant maize Wox3 homologs narrow sheath1 (Ns1) and narrow sheath2 (Ns2) delete the marginal domain, resulting in narrow leaves that fail to form a sheathing leaf base)
+
+Look at present conditions
+```{r}
+print("Conditions")
+for (i in 1:9) {
+  cat(names(sce_list)[i], ":", 
+      paste(unique(colData(sce_list[[i]])$Condition), collapse = ", "), 
+      "\n", 
+      sep =" ")
+}
+```
+SRP266308_1: 2 conditions: Kn1-O/+  and normal cells; only use normal cells? 
+Kn1-O/+ is some mutant line from what i understand from paper
+
+SRP335180: 2 conditions: nitrate+ and nitrate- plants 
+(grown in medium with or without nitrate); only use nitrate+ since this is the normal condition.
+
+if you leave both conditions, you can also take into account whether the plant is stressed or not, but i do not know how relevant that is for the research here and if there will be enough data to do that 
+
+Remove the unwanted cells
 ```{r}
 bad_celltypes <- c("Unknow", 
                    "Contamination")
@@ -199,38 +232,21 @@ sce_list <- lapply(sce_list, function(sce) {
 
 rm(bad_celltypes, bad_genotypes, bad_conditions)
 ```
-- SRP417893: two genotypes: B73 and B73 (ns); only use WT
-(B73 (ns): double mutations in the redundant maize Wox3 homologs narrow sheath1 (Ns1) and narrow sheath2 (Ns2) delete the marginal domain, resulting in narrow leaves that fail to form a sheathing leaf base)
-- SRP266308_1: 2 conditions: Kn1-O/+  and normal cells; only use normal cells? 
-Kn1-O/+ is some mutant line from what i understand from paper
-- SRP335180: 2 conditions: nitrate+ and nitrate- plants 
-(grown in medium with or without nitrate); only use nitrate+ since this seems the normal condition? if you leave both conditions, you can also take into account wether the plant is stressed or not, but i do not know how relevant that is for the research here and if there will be enough data to do that 
 
 
-## filtering of empty droplets
+## Filtering of low quality cells 
 
+Checking for empty droplets
 ```{r}
 plots <- lapply(seq_along(sce_list), function(i) {
     sce <- sce_list[[i]]
     # Compute barcode ranks
-    bcrank <- barcodeRanks(assay(sce, "X"))
+    bcrank <- barcodeRanks(assay(sce, "counts"))
 
     uniq <- !duplicated(bcrank$rank)
-    # Data frame for cutoff lines
-    line_df <- data.frame(
-        cutoff = names(metadata(bcrank)),
-        value  = unlist(metadata(bcrank))
-    )
 
     p <- ggplot(bcrank[uniq, ], aes(rank, total)) +
         geom_point() +
-        geom_hline(
-            data = line_df,
-            aes(color = cutoff, yintercept = value),
-            lty = 2
-        ) +
-      
-
         scale_x_log10() +
         scale_y_log10() +
         labs(
@@ -245,16 +261,17 @@ for (p in plots) print(p)
 
 rm(plots, p)
 ```
-=> filtering of empty droplets is already done
-
-## Check if counts are integers
-
+Filtering of empty droplets is already done
 Mitochondrial DNA is also already filtered out (see paper scPlantDB)
 
+
+## Normalisation and log transformation
+
+Check if counts are integers or log transformed
 ```{r}
 check_normalization_sparse <- function(sce) {
   
-  vals <- assay(sce, "X")
+  vals <- assay(sce, "counts")
   is_integer <- all(vals@x == floor(vals@x)) 
   
   # check for size factors
@@ -278,14 +295,14 @@ norm_df_unlisted
 
 rm(norm_df, norm_df_unlisted)
 ```
+All datasets contain integers and don't have size factors present. 
 
-## Mean-variance relationship
-
+Check normalisation by plotting mean-variance relationship
 ```{r}
 for (name in names(sce_list)) {
   sce <- sce_list[[name]]
   
-  mat <- DelayedArray(assay(sce, "X"))
+  mat <- DelayedArray(assay(sce, "counts"))
   gene_means <- rowMeans(mat)
   gene_vars  <- rowVars(mat)
   
@@ -303,12 +320,14 @@ for (name in names(sce_list)) {
     theme_bw()
   
   print(p)
-  # Free df as well
+  # remove df aswell
   rm(df, gene_means, gene_vars, p)
 }
+rm(sce)
 ```
+Linear relation between the variance in the mean: data is not logtransformed + normalised yet 
 
-=> Data is not logtransformed/normalised yet 
+
 #####
 ## Normalisation based on quickclustering
 #####
@@ -360,9 +379,12 @@ for (name in names(sce_list)) {
 sce_list <- readRDS("normalised_sce_list.rds")
 assays(sce_list[[1]])
 ```
+
+
 #####
 ### normalisation based on celltype
 #####
+
 ```{r}
 set.seed(42)
 sce_list <- lapply(sce_list, function(sce) {
@@ -377,6 +399,7 @@ sce_list <- lapply(sce_list, function(sce) {
   sce
 })
 ```
+
 ```{r}
 sce_list <- lapply(sce_list, function(sce) {
   logNormCounts(sce, assay.type="X")
@@ -437,6 +460,7 @@ print("int_colData names align:")
 all(sapply(X = sce_list, 
        FUN = function(x) identical(names(int_colData(x)), names(int_colData(sce_list$SRP145013)))))
 ```
+
 reduced dimensions do not aling for all datasets
 ```{r}
 sapply(X = sce_list, 
@@ -670,6 +694,7 @@ TSNE_df %>%
       legend.text = element_text(size = 8),     # textsize of legend elements
       legend.key.size = unit(0.3, "cm"))        # boxsize of legend elements
 ```
+
 ```{r}
 TSNE_df %>%
   filter(str_detect(tissue, "Leaf")) %>%      # plot leaf datasets
@@ -706,6 +731,7 @@ TSNE_df %>%
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     ) 
+
 TSNE_df %>%
   filter(str_detect(tissue, "Root")) %>%      # plot leaf datasets
   group_by(celltype) %>%
@@ -718,17 +744,19 @@ TSNE_df %>%
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     )
 ```
+
+
+
 TO DO: 
 
-- Check if normalisation is still needed
+- perform within dataset normalisation 
 - check batch effects
 - make matrix aggregating counts per celltype by mean, median, sum
 - investigate what n_experiments is (see line 56), if these are multiple samples within each dataset we might have to correct for batch effects within each dataset aswell
 
 
-- explain violin plot
 - additional data visualization plots?
-- within dataset quality control plots (empty droplets, doublets, low quality droplets); see tutorial or stat genomics
+- within dataset quality control plots (doublets, low quality droplets); see tutorial or stat genomics
 - tidy code and comments
 
 
