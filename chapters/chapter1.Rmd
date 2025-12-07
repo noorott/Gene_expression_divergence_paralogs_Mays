@@ -1,5 +1,5 @@
 ---
-title: "chapter1"
+title: "Chapter 1: Data Prepreration"
 author: "Noor Ottevaere"
 date: "2025-11-15"
 output: html_document
@@ -654,7 +654,7 @@ However, it is possible to take up cell type as factor in linear modelling (desi
 roughly equivalent to applying linear regression, also assumes constant composition -> not good
 
 - **MNN correction**, eg fastMNN from batchelor
-Finds nearest neighbor cell pairs between different batches --> assumes these cells are from the same biological state. Batch effect is estimated by the difference between these nearest neighbors. Does not assume that the population composition is the same or known beforehand. Key assumption is that the batch effect is orthogonal to the biology, usually reasonable as random vector is likely orthogonal --> could also be good option, but I think that this algorithm wont be optimal as different datasets dont always have shared cell types
+Finds nearest neighbor cell pairs between different batches --> assumes these cells are from the same biological state. Batch effect is estimated by the difference between these nearest neighbors. Does not assume that the population composition is the same or known beforehand. Key assumption is that the batch effect is orthogonal to the biology, usually reasonable as random vector is likely orthogonal --> could also be good option, but I am nut sure if its a problem for this algorithm that not all celltypes are present in all datasets
 
 
 ## Batch correction with linear modelling
@@ -705,7 +705,7 @@ if (TRUE) {
 ```
 
 ```{r}
-TSNE_df <- data.frame(
+TSNE_df2 <- data.frame(
   TSNE1 = reducedDims(sce)$TSNE[,1],
   TSNE2 = reducedDims(sce)$TSNE[,2],
   celltype = sce$Celltype, 
@@ -716,7 +716,7 @@ TSNE_df <- data.frame(
 
 General TSNE plot
 ```{r}
-TSNE_df %>%
+TSNE_df2 %>%
   ggplot(aes(x = TSNE1, y = TSNE2, color = dataset)) +
     geom_point(size = 0.01, alpha = 0.1) +
     labs(x = "TSNE1", y = "TSNE2") +
@@ -724,10 +724,10 @@ TSNE_df %>%
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     )
 
-TSNE_df %>%
+TSNE_df2 %>%
   ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
     geom_point(size = 0.01, alpha = 0.1) +
-    scale_color_manual(values = color_vec36) +
+    scale_color_manual(values = color_vec) +
     labs(x = "TSNE1", y = "TSNE2") +
     guides(                                     # separate aes for legend dots
       color = guide_legend(override.aes = list(size=3, alpha = 1))
@@ -736,9 +736,10 @@ TSNE_df %>%
       legend.text = element_text(size = 8),     # textsize of legend elements
       legend.key.size = unit(0.3, "cm"))        # boxsize of legend elements
 ```
+borders between dataset clusters a bit blurred, but still very apparent dataset effect. Little clustering on celltype
 
 ```{r}
-TSNE_df %>%
+TSNE_df2 %>%
   filter(str_detect(tissue, "Leaf")) %>%      # plot leaf datasets
   group_by(celltype) %>%                      
   filter(n_distinct(dataset) > 1) %>%
@@ -749,7 +750,7 @@ TSNE_df %>%
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     ) 
-TSNE_df %>%
+TSNE_df2 %>%
   filter(str_detect(tissue, "Leaf")) %>%      # plot leaf datasets
   group_by(celltype) %>%
   filter(n_distinct(dataset) > 1) %>% 
@@ -761,9 +762,11 @@ TSNE_df %>%
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     )
 ```
+looks a little better, mesophyll clusters together a bit. For the rest still bad
+
 
 ```{r}
-TSNE_df %>%
+TSNE_df2 %>%
   filter(str_detect(tissue, "Root")) %>%      # plot leaf datasets
   group_by(celltype) %>%                      
   filter(n_distinct(dataset) > 1) %>%
@@ -775,7 +778,7 @@ TSNE_df %>%
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     ) 
 
-TSNE_df %>%
+TSNE_df2 %>%
   filter(str_detect(tissue, "Root")) %>%      # plot leaf datasets
   group_by(celltype) %>%
   filter(n_distinct(dataset) > 1) %>% 
@@ -787,8 +790,11 @@ TSNE_df %>%
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     )
 ```
+Does not look any better
 
 
+## Batch correction with MNN
+start from uncorrected sce again, or work with counts in corrected sce 
 
 TO DO: 
 
