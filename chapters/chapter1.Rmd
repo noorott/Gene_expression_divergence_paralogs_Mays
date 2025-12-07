@@ -714,6 +714,14 @@ TSNE_df2 <- data.frame(
 )
 ```
 
+```{r}
+if (FALSE) {
+  saveRDS(sce, file = "TSNE_df2.rds")
+} else {
+  readRDS("TSNE_df2.rds")
+}
+```
+
 General TSNE plot
 ```{r}
 TSNE_df2 %>%

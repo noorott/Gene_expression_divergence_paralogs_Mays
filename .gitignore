@@ -8,3 +8,4 @@ chapters/normalised_sce_list_quickcluster.rds
 chapters/normalised_sce_list_celltype.rds
 chapters/uncorrected_sce_RedDim.rds
 chapters/corrected_lm_RedDim.rds
+chapters/TSNE_df2.rds
