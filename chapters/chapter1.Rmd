@@ -716,7 +716,7 @@ TSNE_df2 <- data.frame(
 
 ```{r}
 if (FALSE) {
-  saveRDS(sce, file = "TSNE_df2.rds")
+  saveRDS(TSNE_df2, file = "TSNE_df2.rds")
 } else {
   readRDS("TSNE_df2.rds")
 }
