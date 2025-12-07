@@ -694,7 +694,7 @@ rm(correct_lm)
 Visualisation with TSNEs of batch corrected data
 ```{r}
 # saving because runTSNE takes long
-if (TRUE) {
+if (FALSE) {
   sce <- runPCA(sce, exprs_values = "corrected_lm", 
                 subset_row = hvgs, ntop = 1000)
   sce <- runTSNE(sce, dimred = "PCA")
