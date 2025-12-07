@@ -7,4 +7,4 @@ chapters/corrected_RedDim.rds
 chapters/normalised_sce_list_quickcluster.rds
 chapters/normalised_sce_list_celltype.rds
 chapters/uncorrected_sce_RedDim.rds
-chapters/corrected_RedDim.rds
+chapters/corrected_lm_RedDim.rds
