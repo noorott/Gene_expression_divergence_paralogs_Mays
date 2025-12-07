@@ -22,6 +22,7 @@ library(Rtsne)
 library(tidyr) 
 library(ggplot2) 
 library(DelayedArray)
+library(ragg) #to save plots 
 ```
 
 ##################
@@ -81,7 +82,7 @@ sce_info_tidy <- sce_info |>
 ```
 
 ```{r}
-sce_info_tidy %>% 
+sce_info_plot <- sce_info_tidy %>%
   filter(stat %in% c("n_cells", 
                      "n_celltypes", 
                      "total_genes", 
@@ -95,8 +96,15 @@ sce_info_tidy %>%
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.3)) +
   labs(x = NULL, y = NULL)
+sce_info_plot
 ```
+Save the plots and figures in a folder 
+```{r}
+out_dir <- here("chapters","plots_and_figures")
+outfile <- file.path(out_dir, paste0("plot_", 'sce_info_',".png")) #to overwrite an other plot with the same name 
 
+ggsave(filename = outfile, plot = sce_info_plot)
+```
 Check annotated celltypes in datasets
 ```{r}
 cell_types <- sapply(sce_list, function(x){
@@ -109,6 +117,7 @@ cell_types
 ```
 Possible problems to keep in mind for downstream analysis:
 - contamination and unknown
+  --> both removed
 - SRP224648 and SRP281914: only 2 celltypes; not really enough to define REB
   --> dont use for individual dataset analysis (but do use for total)
 - SRP325657_1: only 3 celltypes
@@ -138,6 +147,12 @@ for (i in 1:length(sce_list)) {
   plot <- plotReducedDim(sce_list[[i]], dimred = "UMAP", colour_by = "Celltype") +
     ggtitle(paste(names(sce_list[i])), sce_info["tissue", i])
   print(plot)
+  #save plots
+  sample_name <- names(sce_list[i])
+  outfile <- file.path(out_dir, paste0("UMAP_", sample_name, ".png"))
+  agg_png(outfile, width = 1600, height = 1200, res = 200)
+  print(plot)  
+  dev.off()
 } 
 ```
 PCA plot of each data set colored by celltype
@@ -146,6 +161,12 @@ for (i in 1:length(sce_list)) {
   plot <- plotReducedDim(sce_list[[i]], dimred = "PCA", colour_by = "Celltype") +
     ggtitle(paste(names(sce_list[i])), sce_info["tissue", i])
   print(plot)
+  #save plots
+  sample_name <- names(sce_list[i])
+  outfile <- file.path(out_dir, paste0("PCA_", sample_name, ".png"))
+  agg_png(outfile, width = 1600, height = 1200, res = 200)
+  print(plot)  
+  dev.off()
 } 
 ```
 
@@ -162,7 +183,7 @@ df <- map_df(names(sce_list), function(name) {
   )
 })
 
-ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
+violin <- ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
   geom_violin(trim = FALSE) +
   scale_fill_manual(values= palette.colors()) +
   scale_y_log10() +
@@ -173,6 +194,9 @@ ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
   theme(
     panel.grid = element_blank(),
   )
+plot(violin)
+outfile <- file.path(out_dir, paste0("Violinplot",".png"))
+ggsave(outfile, violin)
 ```
 We see that for example the leaf datasets are comparable in expressed genes even though they are two different datasets
 
@@ -211,8 +235,6 @@ Kn1-O/+ is some mutant line from what i understand from paper
 
 SRP335180: 2 conditions: nitrate+ and nitrate- plants 
 (grown in medium with or without nitrate); only use nitrate+ since this is the normal condition.
-
-if you leave both conditions, you can also take into account whether the plant is stressed or not, but i do not know how relevant that is for the research here and if there will be enough data to do that 
 
 Remove the unwanted cells
 ```{r}
@@ -256,8 +278,14 @@ plots <- lapply(seq_along(sce_list), function(i) {
     p
 })
 
-# Print all plots
-for (p in plots) print(p)
+# Print and save all plots
+for (i in seq_along(plots)) {
+  p <- plots[[i]]
+  print(p)
+  sample_name <- names(sce_list)[i]
+  outfile <- file.path(out_dir, paste0("Barcode Ranks_", sample_name, ".png"))
+  ggsave(outfile, p)
+}
 
 rm(plots, p)
 ```
@@ -352,31 +380,37 @@ param method = String specifying the clustering method to use. "hclust" uses hie
 Do quickcluster for all singleCellExperiments then compute sizefactors
 ```{r}
 set.seed(42)
-sce_list <- lapply(sce_list, function(sce) {
-  cl <- quickCluster(sce, assay.type = "counts")
-  sce <- computeSumFactors(sce, clusters = cl, assay.type = "counts")
-  
-  plot(librarySizeFactors(sce, assay.type = "counts"), sizeFactors(sce), 
-       xlab="Library size factor",
-       ylab="Deconvolution size factor", log='xy', pch=16,
-       col=as.integer(factor(cl)))
-  abline(a=0, b=1, col="red")
-  
-  sce
-})
+if (FALSE) {
+  sce_list <- lapply(sce_list, function(sce) {
+    cl <- quickCluster(sce, assay.type = "counts")
+    sce <- computeSumFactors(sce, clusters = cl, assay.type = "counts")
+    plot(
+      librarySizeFactors(sce, assay.type = "counts"),
+      sizeFactors(sce),
+      xlab = "Library size factor",
+      ylab = "Deconvolution size factor",
+      log = "xy",
+      pch = 16,
+      col = as.integer(factor(cl))
+    )
+    abline(a = 0, b = 1, col = "red")
+    sce
+  })
+}
 ```
 
 Size factors are used to log norm transform counts
 ```{r}
-sce_list <- lapply(sce_list, function(sce) {
+if (FALSE) {
+  sce_list <- lapply(sce_list, function(sce) {
   logNormCounts(sce, assay.type = "counts")
 })
 
-assayNames(sce_list$SRP145013)
+assayNames(sce_list$SRP145013)}
 ```
 
 ```{r}
-saveRDS(sce_list, file = "normalised_sce_list_quickcluster.rds")
+if (FALSE){saveRDS(sce_list, file = "normalised_sce_list_quickcluster.rds")}
 ```
 
 ```{r}
