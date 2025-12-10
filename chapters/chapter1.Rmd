@@ -657,10 +657,13 @@ tsne_general_celltype <- TSNE_df %>%
     theme(
       legend.text = element_text(size = 8),     # textsize of legend elements
       legend.key.size = unit(0.3, "cm"))# boxsize of legend elements
-if (FALSE){outfile <- file.path(out_dir, paste0("tsne_general_dataset", ".png"))
-ggsave(outfile, tsne_general_dataset)
-outfile <- file.path(out_dir, paste0("tsne_general_celltype", ".png"))
-ggsave(outfile, tsne_general_celltype)}
+if (FALSE){
+  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch", ".png"))
+  ggsave(outfile, tsne_general_dataset)
+  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype", ".png"))
+  ggsave(outfile, tsne_general_celltype)
+}
+
 c(tsne_general_dataset,tsne_general_celltype)
 ```
 Possible problem: shared celltypes between datasets are taken together (eg xylem). Do we want this? Otherwise a suffix of the dataset should be added to all coldata values (eg xylem in colData$Celltype--> xylem_SRP272727_23_26, xylem_SRP145013, xylem_SRP335180)
@@ -690,10 +693,12 @@ tsne_leaf_celltype <- TSNE_df %>%
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     )
-if (FALSE){outfile <- file.path(out_dir, paste0("tsne_leaf_dataset", ".png"))
-ggsave(outfile, tsne_leaf_dataset)
-outfile <- file.path(out_dir, paste0("tsne_leaf_celltype", ".png"))
-ggsave(outfile, tsne_leaf_celltype)}
+if (FALSE){
+  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch_leaf", ".png"))
+  ggsave(outfile, tsne_leaf_dataset)
+  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype_leaf", ".png"))
+  ggsave(outfile, tsne_leaf_celltype)
+  }
 c(tsne_leaf_dataset, tsne_leaf_celltype)
 ```
 shared cell types between datasets dont cluster together --> strong dataset effect
@@ -722,16 +727,19 @@ tsne_root_celltype <- TSNE_df %>%
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     )
-if (FALSE){outfile <- file.path(out_dir, paste0("tsne_root_dataset", ".png"))
-ggsave(outfile, tsne_root_dataset)
-outfile <- file.path(out_dir, paste0("tsne_root_celltype", ".png"))
-ggsave(outfile, tsne_root_celltype)}
+if (FALSE){
+  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch_root", ".png"))
+  ggsave(outfile, tsne_root_dataset)
+  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype_root", ".png"))
+  ggsave(outfile, tsne_root_celltype)
+}
+
 c(tsne_root_dataset, tsne_root_celltype)
 ```
 
-Removing logcounts and reduced dims
+Removing reduced dims to make some space
 ```{r}
-assays(sce) <- assays(sce)["counts"]
+
 reducedDim(sce, "PCA") <- NULL
 reducedDim(sce, "TSNE") <- NULL
 reducedDim(sce, "UMAP") <- NULL
