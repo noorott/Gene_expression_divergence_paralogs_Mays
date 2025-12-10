@@ -801,19 +801,35 @@ correct_lm <- quickCorrect(
 )
 
 assay(sce, "corrected_lm") <- assay(correct_lm$corrected) 
-hvgs <- correct_lm$hvgs
 rm(correct_lm)
 ```
 ?maybe do visualisation on correct_lm$dec?
 
 
 Visualisation with TSNEs of batch corrected data
+
+
+```{r}
+# using top 10% of all genes
+if (FALSE) {
+  sce <- runPCA(sce,
+                exprs_values = "corrected_lm",
+                subset_row = chosen.hvgs, 
+                ntop = nrow(assay(sce))*0.1)
+  
+  percent.var <- attr(reducedDim(sce, "PCA"), "percentVar")
+  chosen.elbow <- findElbowPoint(percent.var)
+  
+  p <- plot_pca_variances(sce) + 
+    geom_vline(xintercept = chosen.elbow, color = "red")
+  ggsave(here("plots_and_figures", "PCA_explVar_corrected_lm.png"), p)
+}
+```
+
 ```{r}
 # saving because runTSNE takes long
 if (FALSE) {
-  sce <- runPCA(sce, exprs_values = "corrected_lm", 
-                subset_row = hvgs, ntop = 1000)
-  sce <- runTSNE(sce, dimred = "PCA")
+  sce <- runTSNE(sce, dimred = "PCA", ntop = chosen.elbow)
   saveRDS(sce, file = "corrected_lm_RedDim.rds")
 } else {
   sce <- readRDS("corrected_lm_RedDim.rds")
