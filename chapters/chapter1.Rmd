@@ -24,6 +24,7 @@ library(ggplot2)
 library(DelayedArray)
 library(ragg) #to save plots 
 library(scater)
+library(PCAtools)
 ```
 
 ##################
@@ -101,10 +102,11 @@ sce_info_plot
 ```
 Save the plots and figures in a folder 
 ```{r}
-if (FALSE) {out_dir <- here("plots_and_figures")
-outfile <- file.path(out_dir, paste0("plot_", 'sce_info_',".png")) #to overwrite an other plot with the same name 
-
-ggsave(filename = outfile, plot = sce_info_plot)  }
+if (FALSE) {
+  out_dir <- here("plots_and_figures")
+  outfile <- file.path(out_dir, paste0("plot_", 'sce_info_',".png")) #to overwrite an other plot with the same name 
+  ggsave(filename = outfile, plot = sce_info_plot)
+  }
 ```
 Check annotated celltypes in datasets
 ```{r}
@@ -148,11 +150,13 @@ for (i in 1:length(sce_list)) {
     ggtitle(paste(names(sce_list[i])), sce_info["tissue", i])
   print(plot)
   #save plots
-  if (FALSE){sample_name <- names(sce_list[i])
-  outfile <- file.path(out_dir, paste0("UMAP_", sample_name, ".png"))
-  agg_png(outfile, width = 1600, height = 1200, res = 200)
-  print(plot)  
-  dev.off()}
+  if (FALSE) {
+    sample_name <- names(sce_list[i])
+    outfile <- file.path(out_dir, paste0("UMAP_", sample_name, ".png"))
+    agg_png(outfile, width = 1600, height = 1200, res = 200)
+    print(plot)  
+    dev.off()
+    }
 } 
 ```
 PCA plot of each data set colored by celltype
@@ -162,11 +166,13 @@ for (i in 1:length(sce_list)) {
     ggtitle(paste(names(sce_list[i])), sce_info["tissue", i])
   print(plot)
   #save plots
-  if (FALSE) {sample_name <- names(sce_list[i])
-  outfile <- file.path(out_dir, paste0("PCA_", sample_name, ".png"))
-  agg_png(outfile, width = 1600, height = 1200, res = 200)
-  print(plot)  
-  dev.off()}
+  if (FALSE) {
+    sample_name <- names(sce_list[i])
+    outfile <- file.path(out_dir, paste0("PCA_", sample_name, ".png"))
+    agg_png(outfile, width = 1600, height = 1200, res = 200)
+    print(plot)  
+    dev.off()
+    }
 } 
 ```
 
@@ -195,8 +201,11 @@ violin <- ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
     panel.grid = element_blank(),
   )
 plot(violin)
-if (FALSE){outfile <- file.path(out_dir, paste0("Violinplot",".png"))
-ggsave(outfile, violin)}
+
+if (FALSE){
+  outfile <- file.path(out_dir, paste0("Violinplot",".png"))
+  ggsave(outfile, violin)
+  }
 ```
 We see that for example the leaf datasets are comparable in expressed genes even though they are two different datasets
 
@@ -282,9 +291,11 @@ plots <- lapply(seq_along(sce_list), function(i) {
 for (i in seq_along(plots)) {
   p <- plots[[i]]
   print(p)
-  if (FALSE) {sample_name <- names(sce_list)[i]
-  outfile <- file.path(out_dir, paste0("Barcode Ranks_", sample_name, ".png"))
-  ggsave(outfile, p)}
+  if (FALSE) {
+    sample_name <- names(sce_list)[i]
+    outfile <- file.path(out_dir, paste0("Barcode Ranks_", sample_name, ".png"))
+    ggsave(outfile, p)
+    }
 }
 
 rm(plots, p)
@@ -410,11 +421,13 @@ assayNames(sce_list$SRP145013)}
 ```
 
 ```{r}
-if (FALSE){saveRDS(sce_list, file = "normalised_sce_list_quickcluster.rds")}
+if (FALSE) {
+  saveRDS(sce_list, file = "normalised_sce_list_quickcluster.rds")
+  }
 ```
 
 ```{r}
-if (FALSE){
+if (FALSE) {
   for (name in names(sce_list)) {
   sce <- sce_list[[name]]
   dec <- modelGeneVar(sce)
@@ -424,7 +437,8 @@ if (FALSE){
       ylab="Variance of log-expression")
   curve(varfit$trend(x), col="dodgerblue", add=TRUE, lwd=2)
   rm(sce, dec, varfit)
-  }}
+    }
+  }
 ```
 
 ## normalisation based on celltype
@@ -473,7 +487,7 @@ if (FALSE) {for (name in names(sce_list)) {
 
 ## reading RDS
 
-Choose Quickcluster based, this is theb best
+Choose Quickcluster based, this is the best --> put TRUE
 ```{r}
 if (TRUE) {
   sce_list <- readRDS("normalised_sce_list_quickcluster.rds")
@@ -529,9 +543,6 @@ Data set SRP224648 has TSNE in addition to PCA and UMAP in reduced dimension slo
 
 Remove tsne from Dataset SRP224648
 ```{r}
-# back up tsne in separate variable for later if needed
-tsne_SRP224648 <- reducedDims(sce_list$SRP224648)$TSNE
-
 reducedDims(sce_list$SRP224648)$TSNE <- NULL
 names(reducedDims(sce_list$SRP224648))
 ```
@@ -546,9 +557,6 @@ sce <- do.call(cbind, sce_list)
 
 # remove sce_list to save memory
 rm(sce_list)
-
-# more meaningfull name for assay
-#names(assays(sce)) <- "logcounts"
 ```
 The different datasets are now combined into one single cell experiment object. To remove technical variation between datasets, batch correction should be performed
 
@@ -566,17 +574,11 @@ chosen.hvgs <- getTopHVGs(dec)
 
 Function to plot variances of PCs to determine how many PCs to use for TSNE
 ```{r}
-plot_pca_variances <- function(sce, n = 30) {
-    if (!"PCA" %in% reducedDimNames(sce)) {
-        stop("No PCA results found in reducedDims(sce). Did you run runPCA(sce)?")
-    }
+plot_pca_variances <- function(sce, n = 30, title = "Variance explained per PC") {
 
     # Extract percentage of variance explained
     var_exp <- attr(reducedDim(sce, "PCA"), "percentVar")
 
-    if (is.null(var_exp)) {
-        stop("No 'percentVar' attribute found. runPCA() must be run with BSPARAM or default settings.")
-    }
     # Prepare a data frame for ggplot
     df <- data.frame(
         PC = seq_along(var_exp),
@@ -590,21 +592,26 @@ plot_pca_variances <- function(sce, n = 30) {
         geom_point() +
         theme_bw() +
         ylab("Explained variance (%)") +
-        xlab("Principal component") 
+        xlab("Principal component") +
+        ggtitle(title)
 }
 ```
 ```{r}
 # using top 10% of all genes
 if (FALSE) {
   sce <- runPCA(sce, subset_row = chosen.hvgs, ntop = nrow(assay(sce))*0.1)
-  plot_pca_variances(sce)
+  percent.var <- attr(reducedDim(sce, "PCA"), "percentVar")
+  chosen.elbow <- findElbowPoint(percent.var)
+  p <- plot_pca_variances(sce) + 
+    geom_vline(xintercept = chosen.elbow, color = "red")
+  ggsave(here("plots_and_figures", "PCA_explVar_uncorrected.png"), p)
 }
 ```
 
 
 ```{r}
 if (FALSE) {
-  sce <- runTSNE(sce, dimred = "PCA", ntop = 10)
+  sce <- runTSNE(sce, dimred = "PCA", ntop = chosen.elbow)
   saveRDS(sce, file = "uncorrected_sce_RedDim.rds")
 } else {
   sce <- readRDS("uncorrected_sce_RedDim.rds")
