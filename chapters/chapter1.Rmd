@@ -34,6 +34,7 @@ library(PCAtools)
 Setting root directory to files
 ```{r}
 data_dir <- here("scRNAseq_data", "zea_mays")
+out_dir <- here("plots_and_figures")
 ```
 
 Getting file directories
@@ -120,7 +121,6 @@ sce_info_plot
 Save the plots and figures in a folder 
 ```{r}
 if (FALSE) {
-  out_dir <- here("plots_and_figures")
   outfile <- file.path(out_dir, paste0("plot_", 'sce_info_',".png")) #to overwrite an other plot with the same name 
   ggsave(filename = outfile, plot = sce_info_plot)
   }
@@ -309,6 +309,12 @@ plots <- lapply(seq_along(sce_list), function(i) {
         labs(
             title = paste("Barcode Ranks:", names(sce_list)[i]),
             y = "Total UMI count"
+        ) +
+       theme(
+            panel.background = element_blank(),   # remove panel background
+            panel.grid.major = element_blank(),   # remove major grid lines
+            panel.grid.minor = element_blank(),   # remove minor grid lines
+            axis.line = element_line(color = "black") # add axis lines
         )
     p
 })
@@ -382,9 +388,17 @@ for (name in names(sce_list)) {
     ggtitle(paste("Mean–Variance relationship:", name)) +
     scale_y_log10() + 
     scale_x_log10() +
-    theme_bw()
+    theme_bw() + 
+    theme(
+      panel.grid = element_blank()
+    )
   
   print(p)
+  if (TRUE) {
+    sample_name <- name
+    outfile <- file.path(out_dir, paste0("mean_var_before_normalisation_", sample_name, ".png"))
+    ggsave(outfile, p)
+    }
   # remove df aswell
   rm(df, gene_means, gene_vars, p)
 }
@@ -418,10 +432,16 @@ Do quickcluster for all singleCellExperiments then compute sizefactors
 ```{r}
 set.seed(42)
 if (FALSE) {
-  sce_list <- lapply(sce_list, function(sce) {
+  sce_list <- lapply(seq_along(sce_list), function(i) {
+    sce <- sce_list[[i]]
     cl <- quickCluster(sce, assay.type = "counts")
     sce <- computeSumFactors(sce, clusters = cl, assay.type = "counts")
-    plot(
+    
+    sample_name <- names(sce_list)[i]
+    outfile <- file.path(out_dir, paste0("deconvoluted_sizefactors_", sample_name, ".png"))
+    
+    png(outfile, width = 800, height = 600)
+    p <- plot(
       librarySizeFactors(sce, assay.type = "counts"),
       sizeFactors(sce),
       xlab = "Library size factor",
@@ -431,6 +451,9 @@ if (FALSE) {
       col = as.integer(factor(cl))
     )
     abline(a = 0, b = 1, col = "red")
+    
+    dev.off()
+    
     sce
   })
 }
@@ -455,14 +478,21 @@ if (FALSE) {
 ```{r}
 if (FALSE) {
   for (name in names(sce_list)) {
-  sce <- sce_list[[name]]
-  dec <- modelGeneVar(sce)
-  varfit <- metadata(dec)
-  plot(varfit$mean, varfit$var, 
-      xlab="Mean of log-expression",
-      ylab="Variance of log-expression")
-  curve(varfit$trend(x), col="dodgerblue", add=TRUE, lwd=2)
-  rm(sce, dec, varfit)
+    sce <- sce_list[[name]]
+    dec <- modelGeneVar(sce)
+    varfit <- metadata(dec)
+    
+    sample_name <- name
+    outfile <- file.path(out_dir, paste0("mean_var_after_normalisation_", sample_name, ".png"))
+    
+    png(outfile, width = 800, height = 600)
+    plot(varfit$mean, varfit$var, 
+        xlab="Mean of log-expression",
+        ylab="Variance of log-expression")
+    curve(varfit$trend(x), col="dodgerblue", add=TRUE, lwd=2)
+    
+    dev.off()
+    rm(sce, dec, varfit)
     }
   }
 ```
