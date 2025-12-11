@@ -814,8 +814,7 @@ Visualisation with TSNEs of batch corrected data
 if (FALSE) {
   sce <- runPCA(sce,
                 exprs_values = "corrected_lm",
-                subset_row = chosen.hvgs, 
-                ntop = nrow(assay(sce))*0.1)
+                subset_row = chosen.hvgs)
   
   percent.var <- attr(reducedDim(sce, "PCA"), "percentVar")
   chosen.elbow <- findElbowPoint(percent.var)
