@@ -84,7 +84,18 @@ sce_info_tidy <- sce_info |>
 ```
 
 ```{r}
-sce_info_plot <- sce_info_tidy %>%
+tissue_map <- sce_info_tidy |>
+  filter(stat == "tissue") |>
+  select(sample, tissue = value)
+```
+
+```{r}
+sce_info_tidy2 <- sce_info_tidy |>
+  left_join(tissue_map, by = "sample")
+```
+
+```{r}
+sce_info_plot <- sce_info_tidy2 %>%
   filter(stat %in% c("n_cells", 
                      "n_celltypes", 
                      "total_genes", 
@@ -92,12 +103,18 @@ sce_info_plot <- sce_info_tidy %>%
                      "Avg_library_size", 
                      "n_experiments")) %>%
   ggplot(aes(x = sample, y = as.numeric(value))) +
-  geom_col() +
+  geom_col(fill = "steelblue") +
   facet_wrap(~stat, scales = "free_y") +
+  scale_x_discrete(labels = sce_info_tidy2$tissue) +
   scale_y_continuous(breaks = pretty_breaks(n = 4)) +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.3)) +
-  labs(x = NULL, y = NULL)
+  labs(x = NULL, y = NULL) +
+  theme(
+      plot.title = element_text(face = "bold", size = 24),
+      axis.text.x = element_text(angle = 90, vjust = 0.3),
+      panel.grid = element_blank(),
+      axis.line = element_blank(),
+      axis.ticks = element_blank(),
+  ) 
 sce_info_plot
 ```
 Save the plots and figures in a folder 
@@ -216,6 +233,11 @@ We see that for example the leaf datasets are comparable in expressed genes even
 
 ## Filtering of unwanted cells 
 
+Total number of cells before filtering
+```{r}
+sum(as.numeric(sce_info["n_cells",-ncol(sce_info)]))
+```
+
 Look at present genotypes
 ```{r}
 print("Genotypes")
@@ -262,6 +284,10 @@ sce_list <- lapply(sce_list, function(sce) {
 })
 
 rm(bad_celltypes, bad_genotypes, bad_conditions)
+```
+
+```{r}
+sum(as.numeric(lapply(sce_list, ncol)))
 ```
 
 
