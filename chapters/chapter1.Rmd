@@ -569,7 +569,7 @@ Before applying batch correction is performed, the data is visualized with TSNE 
 # informative of the biological structure of the data
 dec <- modelGeneVar(sce, block = sce$Dataset) # decomposition of variance
 # select genes with biological variance among datasets
-chosen.hvgs <- getTopHVGs(dec)
+chosen.hvgs <- getTopHVGs(dec, n = nrow(assay(sce))*0.1)
 ```
 
 Function to plot variances of PCs to determine how many PCs to use for TSNE
