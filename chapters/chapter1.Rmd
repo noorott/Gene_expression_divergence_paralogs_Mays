@@ -625,7 +625,7 @@ plot_pca_variances <- function(sce, n = 30, title = "Variance explained per PC")
 ```{r}
 # using top 10% of all genes
 if (FALSE) {
-  sce <- runPCA(sce, subset_row = chosen.hvgs, ntop = nrow(assay(sce))*0.1)
+  sce <- runPCA(sce, subset_row = chosen.hvgs)
   percent.var <- attr(reducedDim(sce, "PCA"), "percentVar")
   chosen.elbow <- findElbowPoint(percent.var)
   p <- plot_pca_variances(sce) + 
@@ -685,9 +685,9 @@ tsne_general_celltype <- TSNE_df %>%
       legend.key.size = unit(0.3, "cm"))# boxsize of legend elements
 if (FALSE){
   outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch", ".png"))
-  ggsave(outfile, tsne_general_dataset)
+  ggsave(outfile, tsne_general_dataset, width = 8, height = 6, units = "in")
   outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype", ".png"))
-  ggsave(outfile, tsne_general_celltype)
+  ggsave(outfile, tsne_general_celltype, width = 10, height = 6, units = "in")
 }
 
 c(tsne_general_dataset,tsne_general_celltype)
@@ -721,9 +721,9 @@ tsne_leaf_celltype <- TSNE_df %>%
     )
 if (FALSE){
   outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch_leaf", ".png"))
-  ggsave(outfile, tsne_leaf_dataset)
+  ggsave(outfile, tsne_leaf_dataset, width = 8, height = 6, units = "in")
   outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype_leaf", ".png"))
-  ggsave(outfile, tsne_leaf_celltype)
+  ggsave(outfile, tsne_leaf_celltype, width = 8, height = 6, units = "in")
   }
 c(tsne_leaf_dataset, tsne_leaf_celltype)
 ```
@@ -755,9 +755,9 @@ tsne_root_celltype <- TSNE_df %>%
     )
 if (FALSE){
   outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch_root", ".png"))
-  ggsave(outfile, tsne_root_dataset)
+  ggsave(outfile, tsne_root_dataset, width = 8, height = 6, units = "in")
   outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype_root", ".png"))
-  ggsave(outfile, tsne_root_celltype)
+  ggsave(outfile, tsne_root_celltype, width = 8, height = 6, units = "in")
 }
 
 c(tsne_root_dataset, tsne_root_celltype)
