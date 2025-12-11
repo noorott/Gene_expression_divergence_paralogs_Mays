@@ -816,13 +816,17 @@ QuickCorrect function performs data set up steps:
 and then performs batch correction according to specified PARAM
 ```{r}
 set.seed(73928)
+design <- model.matrix(~ 0 + Celltype + Dataset, 
+                       data = as.data.frame(colData(sce)))
+celltype_cols <- grep("^Celltype", colnames(design), value = TRUE)
 
 correct_lm <- quickCorrect(
-  sce, 
+  sce,
   batch = sce$Dataset,
-  assay.type = "counts",   # expects counts assay not logcounts
-  PARAM = RegressParam(    # use regressBatches as batch correction
-    design = model.matrix(~ 0 + sce$Celltype) # no intercept
+  assay.type = "counts",
+  PARAM = RegressParam(
+    design = design,
+    keep = celltype_cols    # preserve biological variance of celltype
   )
 )
 
