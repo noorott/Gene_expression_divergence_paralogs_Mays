@@ -24,6 +24,7 @@ library(ggplot2)
 library(DelayedArray)
 library(ragg) #to save plots 
 library(scater)
+library(PCAtools)
 ```
 
 ##################
@@ -101,10 +102,11 @@ sce_info_plot
 ```
 Save the plots and figures in a folder 
 ```{r}
-if (FALSE) {out_dir <- here("chapters","plots_and_figures")
-outfile <- file.path(out_dir, paste0("plot_", 'sce_info_',".png")) #to overwrite an other plot with the same name 
-
-ggsave(filename = outfile, plot = sce_info_plot)  }
+if (FALSE) {
+  out_dir <- here("plots_and_figures")
+  outfile <- file.path(out_dir, paste0("plot_", 'sce_info_',".png")) #to overwrite an other plot with the same name 
+  ggsave(filename = outfile, plot = sce_info_plot)
+  }
 ```
 Check annotated celltypes in datasets
 ```{r}
@@ -141,7 +143,6 @@ Possible problems to keep in mind for downstream analysis:
   -->
 
 
-
 UMAP plot of each data set colored by cell type
 ```{r}
 for (i in 1:length(sce_list)) {
@@ -149,11 +150,13 @@ for (i in 1:length(sce_list)) {
     ggtitle(paste(names(sce_list[i])), sce_info["tissue", i])
   print(plot)
   #save plots
-  if (FALSE){sample_name <- names(sce_list[i])
-  outfile <- file.path(out_dir, paste0("UMAP_", sample_name, ".png"))
-  agg_png(outfile, width = 1600, height = 1200, res = 200)
-  print(plot)  
-  dev.off()}
+  if (FALSE) {
+    sample_name <- names(sce_list[i])
+    outfile <- file.path(out_dir, paste0("UMAP_", sample_name, ".png"))
+    agg_png(outfile, width = 1600, height = 1200, res = 200)
+    print(plot)  
+    dev.off()
+    }
 } 
 ```
 PCA plot of each data set colored by celltype
@@ -163,11 +166,13 @@ for (i in 1:length(sce_list)) {
     ggtitle(paste(names(sce_list[i])), sce_info["tissue", i])
   print(plot)
   #save plots
-  if (FALSE) {sample_name <- names(sce_list[i])
-  outfile <- file.path(out_dir, paste0("PCA_", sample_name, ".png"))
-  agg_png(outfile, width = 1600, height = 1200, res = 200)
-  print(plot)  
-  dev.off()}
+  if (FALSE) {
+    sample_name <- names(sce_list[i])
+    outfile <- file.path(out_dir, paste0("PCA_", sample_name, ".png"))
+    agg_png(outfile, width = 1600, height = 1200, res = 200)
+    print(plot)  
+    dev.off()
+    }
 } 
 ```
 
@@ -196,8 +201,11 @@ violin <- ggplot(df, aes(x = dataset, y = n_genes, fill = tissue)) +
     panel.grid = element_blank(),
   )
 plot(violin)
-if (FALSE){outfile <- file.path(out_dir, paste0("Violinplot",".png"))
-ggsave(outfile, violin)}
+
+if (FALSE){
+  outfile <- file.path(out_dir, paste0("Violinplot",".png"))
+  ggsave(outfile, violin)
+  }
 ```
 We see that for example the leaf datasets are comparable in expressed genes even though they are two different datasets
 
@@ -283,9 +291,11 @@ plots <- lapply(seq_along(sce_list), function(i) {
 for (i in seq_along(plots)) {
   p <- plots[[i]]
   print(p)
-  if (FALSE){sample_name <- names(sce_list)[i]
-  outfile <- file.path(out_dir, paste0("Barcode Ranks_", sample_name, ".png"))
-  ggsave(outfile, p)}
+  if (FALSE) {
+    sample_name <- names(sce_list)[i]
+    outfile <- file.path(out_dir, paste0("Barcode Ranks_", sample_name, ".png"))
+    ggsave(outfile, p)
+    }
 }
 
 rm(plots, p)
@@ -411,11 +421,13 @@ assayNames(sce_list$SRP145013)}
 ```
 
 ```{r}
-if (FALSE){saveRDS(sce_list, file = "normalised_sce_list_quickcluster.rds")}
+if (FALSE) {
+  saveRDS(sce_list, file = "normalised_sce_list_quickcluster.rds")
+  }
 ```
 
 ```{r}
-if (FALSE){
+if (FALSE) {
   for (name in names(sce_list)) {
   sce <- sce_list[[name]]
   dec <- modelGeneVar(sce)
@@ -425,7 +437,8 @@ if (FALSE){
       ylab="Variance of log-expression")
   curve(varfit$trend(x), col="dodgerblue", add=TRUE, lwd=2)
   rm(sce, dec, varfit)
-  }}
+    }
+  }
 ```
 
 ## normalisation based on celltype
@@ -449,17 +462,17 @@ if (FALSE){
 ```
 
 ```{r}
-if (FALSE){sce_list <- lapply(sce_list, function(sce) {
+if (FALSE) {sce_list <- lapply(sce_list, function(sce) {
   logNormCounts(sce, assay.type="counts")
 })}
 ```
 
 ```{r}
-if (FALSE){saveRDS(sce_list, file = "normalised_sce_list_celltype.rds")}
+if (FALSE) {saveRDS(sce_list, file = "normalised_sce_list_celltype.rds")}
 ```
 
 ```{r}
-if (FALSE){for (name in names(sce_list)) {
+if (FALSE) {for (name in names(sce_list)) {
   sce <- sce_list[[name]]
   dec <- modelGeneVar(sce)
   varfit <- metadata(dec)
@@ -474,14 +487,13 @@ if (FALSE){for (name in names(sce_list)) {
 
 ## reading RDS
 
-Choose Quickcluster based or cell type based
-Data set aggregation is done with cell type based
+Choose Quickcluster based, this is the best --> put TRUE
 ```{r}
-sce_list <- readRDS("normalised_sce_list_quickcluster.rds")
-```
-
-```{r}
-sce_list <- readRDS("normalised_sce_list_celltype.rds")
+if (TRUE) {
+  sce_list <- readRDS("normalised_sce_list_quickcluster.rds")
+} else {
+  sce_list <- readRDS("normalised_sce_list_celltype.rds")
+}
 ```
 
 
@@ -522,18 +534,15 @@ all(sapply(X = sce_list,
        FUN = function(x) identical(names(int_colData(x)), names(int_colData(sce_list$SRP145013)))))
 ```
 
-reduced dimensions do not aling for all datasets
+reduced dimensions do not align for all data sets
 ```{r}
 sapply(X = sce_list, 
        FUN = function(x) names(reducedDims(x)))
 ```
-Dataset SRP224648 has X_tsne in addition to X_umap in reduced dimension slot
+Data set SRP224648 has TSNE in addition to PCA and UMAP in reduced dimension slot
 
 Remove tsne from Dataset SRP224648
 ```{r}
-# back up tsne in separate variable for later if needed
-tsne_SRP224648 <- reducedDims(sce_list$SRP224648)$TSNE
-
 reducedDims(sce_list$SRP224648)$TSNE <- NULL
 names(reducedDims(sce_list$SRP224648))
 ```
@@ -548,9 +557,6 @@ sce <- do.call(cbind, sce_list)
 
 # remove sce_list to save memory
 rm(sce_list)
-
-# more meaningfull name for assay
-#names(assays(sce)) <- "logcounts"
 ```
 The different datasets are now combined into one single cell experiment object. To remove technical variation between datasets, batch correction should be performed
 
@@ -562,13 +568,50 @@ Before applying batch correction is performed, the data is visualized with TSNE 
 # Feature selection for dimensionality reduction: want genes that are 
 # informative of the biological structure of the data
 dec <- modelGeneVar(sce, block = sce$Dataset) # decomposition of variance
-chosen.hvgs <- dec$bio > 0                    # select genes with biological variance among datasets
+# select genes with biological variance among datasets
+chosen.hvgs <- getTopHVGs(dec, n = nrow(assay(sce))*0.1)
+```
+
+Function to plot variances of PCs to determine how many PCs to use for TSNE
+```{r}
+plot_pca_variances <- function(sce, n = 30, title = "Variance explained per PC") {
+
+    # Extract percentage of variance explained
+    var_exp <- attr(reducedDim(sce, "PCA"), "percentVar")
+
+    # Prepare a data frame for ggplot
+    df <- data.frame(
+        PC = seq_along(var_exp),
+        Variance = var_exp
+    )
+    # Limit the number of PCs plotted
+    df <- df[seq_len(min(n, nrow(df))), ]
+    
+    ggplot(df, aes(x = PC, y = Variance)) +
+        geom_bar(stat = "identity", fill = "steelblue") +
+        geom_point() +
+        theme_bw() +
+        ylab("Explained variance (%)") +
+        xlab("Principal component") +
+        ggtitle(title)
+}
 ```
 ```{r}
-# saving because runTSNE takes long
+# using top 10% of all genes
 if (FALSE) {
-  sce <- runPCA(sce, subset_row = chosen.hvgs, ntop = 1000)
-  sce <- runTSNE(sce, dimred = "PCA")
+  sce <- runPCA(sce, subset_row = chosen.hvgs, ntop = nrow(assay(sce))*0.1)
+  percent.var <- attr(reducedDim(sce, "PCA"), "percentVar")
+  chosen.elbow <- findElbowPoint(percent.var)
+  p <- plot_pca_variances(sce) + 
+    geom_vline(xintercept = chosen.elbow, color = "red")
+  ggsave(here("plots_and_figures", "PCA_explVar_uncorrected.png"), p)
+}
+```
+
+
+```{r}
+if (FALSE) {
+  sce <- runTSNE(sce, dimred = "PCA", ntop = chosen.elbow)
   saveRDS(sce, file = "uncorrected_sce_RedDim.rds")
 } else {
   sce <- readRDS("uncorrected_sce_RedDim.rds")
@@ -576,6 +619,7 @@ if (FALSE) {
 
 sce$Dataset = as.factor(sce$Dataset)
 ```
+
 
 making dataframe for TSNE plots
 ```{r}
@@ -613,10 +657,13 @@ tsne_general_celltype <- TSNE_df %>%
     theme(
       legend.text = element_text(size = 8),     # textsize of legend elements
       legend.key.size = unit(0.3, "cm"))# boxsize of legend elements
-if (FALSE){outfile <- file.path(out_dir, paste0("tsne_general_dataset", ".png"))
-ggsave(outfile, tsne_general_dataset)
-outfile <- file.path(out_dir, paste0("tsne_general_celltype", ".png"))
-ggsave(outfile, tsne_general_celltype)}
+if (FALSE){
+  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch", ".png"))
+  ggsave(outfile, tsne_general_dataset)
+  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype", ".png"))
+  ggsave(outfile, tsne_general_celltype)
+}
+
 c(tsne_general_dataset,tsne_general_celltype)
 ```
 Possible problem: shared celltypes between datasets are taken together (eg xylem). Do we want this? Otherwise a suffix of the dataset should be added to all coldata values (eg xylem in colData$Celltype--> xylem_SRP272727_23_26, xylem_SRP145013, xylem_SRP335180)
@@ -646,10 +693,12 @@ tsne_leaf_celltype <- TSNE_df %>%
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     )
-if (FALSE){outfile <- file.path(out_dir, paste0("tsne_leaf_dataset", ".png"))
-ggsave(outfile, tsne_leaf_dataset)
-outfile <- file.path(out_dir, paste0("tsne_leaf_celltype", ".png"))
-ggsave(outfile, tsne_leaf_celltype)}
+if (FALSE){
+  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch_leaf", ".png"))
+  ggsave(outfile, tsne_leaf_dataset)
+  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype_leaf", ".png"))
+  ggsave(outfile, tsne_leaf_celltype)
+  }
 c(tsne_leaf_dataset, tsne_leaf_celltype)
 ```
 shared cell types between datasets dont cluster together --> strong dataset effect
@@ -678,16 +727,19 @@ tsne_root_celltype <- TSNE_df %>%
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     )
-if (FALSE){outfile <- file.path(out_dir, paste0("tsne_root_dataset", ".png"))
-ggsave(outfile, tsne_root_dataset)
-outfile <- file.path(out_dir, paste0("tsne_root_celltype", ".png"))
-ggsave(outfile, tsne_root_celltype)}
+if (FALSE){
+  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch_root", ".png"))
+  ggsave(outfile, tsne_root_dataset)
+  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype_root", ".png"))
+  ggsave(outfile, tsne_root_celltype)
+}
+
 c(tsne_root_dataset, tsne_root_celltype)
 ```
 
-Removing logcounts and reduced dims
+Removing reduced dims to make some space
 ```{r}
-assays(sce) <- assays(sce)["counts"]
+
 reducedDim(sce, "PCA") <- NULL
 reducedDim(sce, "TSNE") <- NULL
 reducedDim(sce, "UMAP") <- NULL
@@ -749,19 +801,34 @@ correct_lm <- quickCorrect(
 )
 
 assay(sce, "corrected_lm") <- assay(correct_lm$corrected) 
-hvgs <- correct_lm$hvgs
 rm(correct_lm)
 ```
 ?maybe do visualisation on correct_lm$dec?
 
 
 Visualisation with TSNEs of batch corrected data
+
+
+```{r}
+# using top 10% of all genes
+if (FALSE) {
+  sce <- runPCA(sce,
+                exprs_values = "corrected_lm",
+                subset_row = chosen.hvgs)
+  
+  percent.var <- attr(reducedDim(sce, "PCA"), "percentVar")
+  chosen.elbow <- findElbowPoint(percent.var)
+  
+  p <- plot_pca_variances(sce) + 
+    geom_vline(xintercept = chosen.elbow, color = "red")
+  ggsave(here("plots_and_figures", "PCA_explVar_corrected_lm.png"), p)
+}
+```
+
 ```{r}
 # saving because runTSNE takes long
 if (FALSE) {
-  sce <- runPCA(sce, exprs_values = "corrected_lm", 
-                subset_row = hvgs, ntop = 1000)
-  sce <- runTSNE(sce, dimred = "PCA")
+  sce <- runTSNE(sce, dimred = "PCA", ntop = chosen.elbow)
   saveRDS(sce, file = "corrected_lm_RedDim.rds")
 } else {
   sce <- readRDS("corrected_lm_RedDim.rds")
@@ -985,8 +1052,12 @@ if (TRUE) {
 
 TO DO: 
 
-- make good visualisation: in how many datasets does each celltype occur and in what number; important for linear model (line 665) --> done
-- look further into batch correction methods (see start line 644) --> an extra method done
+-Redo analysis with normalized counts from quickcluster
+-Redo all TSNEs, only using the best PCs from PCA, also redo PCAs for it with 
+top 10% of hvg instead of top 1000
+  - batch correction lm method
+  - batch corretion MNN method
+
 - make matrix aggregating counts per celltype by mean, median, sum
 - investigate what n_experiments is (see line 56), if these are multiple samples within each dataset we might have to correct for batch effects within each dataset aswell?
 
