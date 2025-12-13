@@ -834,7 +834,6 @@ cell_types_df
 ```
 composition of celltypes among different datasets is defenitely not constant --> cannot use regressBatches or rescaleBatches
 
-
 ## Batch correction with MNN
 start from uncorrected sce again, or work with counts in corrected sce 
 - Compared to linear regression, MNN correction does not assume that the population composition is the same or known beforehand. This is because it learns the shared population structure via identification of MNN pairs and uses this information to obtain an appropriate estimate of the batch effect.
@@ -911,7 +910,9 @@ tsne_batchcormnn_dataset <- TSNE_df2_mnn %>%
     labs(x = "TSNE1", y = "TSNE2") +
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
-    )
+    ) +
+  theme(legend.position = "none") +
+  ggtitle("Coloured by dataset")
 
 tsne_batchcormnn_celltype <- TSNE_df2_mnn %>%
   ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
@@ -923,7 +924,9 @@ tsne_batchcormnn_celltype <- TSNE_df2_mnn %>%
     ) +
     theme(
       legend.text = element_text(size = 8),     # textsize of legend elements
-      legend.key.size = unit(0.3, "cm")) # boxsize of legend elements
+      legend.key.size = unit(0.3, "cm")) +
+  theme(legend.position = "none") + 
+  ggtitle("Coloured by celltype")
 if (FALSE) {outfile <- file.path(out_dir, paste0("tsne_batchcormnn_dataset", ".png"))
 ggsave(outfile, tsne_batchcormnn_dataset)
 outfile <- file.path(out_dir, paste0("tsne_batchcormnn_celltype", ".png"))
@@ -942,7 +945,10 @@ tsne_batchcormnn_leaf_dataset <- TSNE_df2_mnn %>%
     labs(x = "TSNE1", y = "TSNE2") +
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
-    ) 
+    ) +
+  theme(legend.position = "none") + 
+  ggtitle("Coloured by dataset")
+
 tsne_batchcormnn_leaf_celltype <- TSNE_df2_mnn %>%
   filter(str_detect(tissue, "Leaf")) %>%      # plot leaf datasets
   group_by(celltype) %>%
@@ -953,7 +959,9 @@ tsne_batchcormnn_leaf_celltype <- TSNE_df2_mnn %>%
     labs(x = "TSNE1", y = "TSNE2") +
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
-    )
+    ) +
+  theme(legend.position = "none") + 
+  ggtitle("Coloured by celltype")
 if (FALSE) {outfile <- file.path(out_dir, paste0("tsne_batchcormnn_leaf_dataset", ".png"))
 ggsave(outfile, tsne_batchcormnn_leaf_dataset)
 outfile <- file.path(out_dir, paste0("tsne_batchcormnn_leaf_celltype", ".png"))
@@ -974,7 +982,9 @@ tsne_batchcormnn_root_dataset <- TSNE_df2_mnn %>%
     labs(x = "TSNE1", y = "TSNE2") +
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
-    ) 
+    ) +
+  theme(legend.position = "none") + 
+  ggtitle("Coloured by dataset")
 
 tsne_batchcormnn_root_celltype <- TSNE_df2_mnn %>%
   filter(str_detect(tissue, "Root")) %>%      # plot root datasets
@@ -986,8 +996,11 @@ tsne_batchcormnn_root_celltype <- TSNE_df2_mnn %>%
     labs(x = "TSNE1", y = "TSNE2") +
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
-    )
-if (FALSE) {outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_dataset", ".png"))
+    ) +
+  theme(legend.position = "none") + 
+  ggtitle("Coloured by celltype")
+
+if (FALSE){outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_dataset", ".png"))
 ggsave(outfile, tsne_batchcormnn_root_dataset)
 outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_celltype", ".png"))
 ggsave(outfile, tsne_batchcormnn_root_celltype)}
@@ -996,11 +1009,11 @@ c(tsne_batchcormnn_root_dataset, tsne_batchcormnn_root_celltype)
 
 TO DO: 
 
--Redo analysis with normalized counts from quickcluster
+-Redo analysis with normalized counts from quickcluster --> done
 -Redo all TSNEs, only using the best PCs from PCA, also redo PCAs for it with 
-top 10% of hvg instead of top 1000
-  - batch correction lm method
-  - batch corretion MNN method
+top 10% of hvg instead of top 1000 
+  - batch correction lm method --> removed because not good? 
+  - batch corretion MNN method --> done
 
 - make matrix aggregating counts per celltype by mean, median, sum
 - investigate what n_experiments is (see line 56), if these are multiple samples within each dataset we might have to correct for batch effects within each dataset aswell?
