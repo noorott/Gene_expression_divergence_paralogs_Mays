@@ -34,6 +34,7 @@ library(PCAtools)
 Setting root directory to files
 ```{r}
 data_dir <- here("scRNAseq_data", "zea_mays")
+out_dir <- here("plots_and_figures")
 ```
 
 Getting file directories
@@ -84,7 +85,18 @@ sce_info_tidy <- sce_info |>
 ```
 
 ```{r}
-sce_info_plot <- sce_info_tidy %>%
+tissue_map <- sce_info_tidy |>
+  filter(stat == "tissue") |>
+  select(sample, tissue = value)
+```
+
+```{r}
+sce_info_tidy2 <- sce_info_tidy |>
+  left_join(tissue_map, by = "sample")
+```
+
+```{r}
+sce_info_plot <- sce_info_tidy2 %>%
   filter(stat %in% c("n_cells", 
                      "n_celltypes", 
                      "total_genes", 
@@ -92,18 +104,23 @@ sce_info_plot <- sce_info_tidy %>%
                      "Avg_library_size", 
                      "n_experiments")) %>%
   ggplot(aes(x = sample, y = as.numeric(value))) +
-  geom_col() +
+  geom_col(fill = "steelblue") +
   facet_wrap(~stat, scales = "free_y") +
+  scale_x_discrete(labels = sce_info_tidy2$tissue) +
   scale_y_continuous(breaks = pretty_breaks(n = 4)) +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.3)) +
-  labs(x = NULL, y = NULL)
+  labs(x = NULL, y = NULL) +
+  theme(
+      plot.title = element_text(face = "bold", size = 24),
+      axis.text.x = element_text(angle = 90, vjust = 0.3),
+      panel.grid = element_blank(),
+      axis.line = element_blank(),
+      axis.ticks = element_blank(),
+  ) 
 sce_info_plot
 ```
 Save the plots and figures in a folder 
 ```{r}
 if (FALSE) {
-  out_dir <- here("plots_and_figures")
   outfile <- file.path(out_dir, paste0("plot_", 'sce_info_',".png")) #to overwrite an other plot with the same name 
   ggsave(filename = outfile, plot = sce_info_plot)
   }
@@ -216,6 +233,11 @@ We see that for example the leaf datasets are comparable in expressed genes even
 
 ## Filtering of unwanted cells 
 
+Total number of cells before filtering
+```{r}
+sum(as.numeric(sce_info["n_cells",-ncol(sce_info)]))
+```
+
 Look at present genotypes
 ```{r}
 print("Genotypes")
@@ -264,6 +286,10 @@ sce_list <- lapply(sce_list, function(sce) {
 rm(bad_celltypes, bad_genotypes, bad_conditions)
 ```
 
+```{r}
+sum(as.numeric(lapply(sce_list, ncol)))
+```
+
 
 ## Filtering of low quality cells 
 
@@ -283,6 +309,12 @@ plots <- lapply(seq_along(sce_list), function(i) {
         labs(
             title = paste("Barcode Ranks:", names(sce_list)[i]),
             y = "Total UMI count"
+        ) +
+       theme(
+            panel.background = element_blank(),   # remove panel background
+            panel.grid.major = element_blank(),   # remove major grid lines
+            panel.grid.minor = element_blank(),   # remove minor grid lines
+            axis.line = element_line(color = "black") # add axis lines
         )
     p
 })
@@ -356,9 +388,17 @@ for (name in names(sce_list)) {
     ggtitle(paste("Mean–Variance relationship:", name)) +
     scale_y_log10() + 
     scale_x_log10() +
-    theme_bw()
+    theme_bw() + 
+    theme(
+      panel.grid = element_blank()
+    )
   
   print(p)
+  if (TRUE) {
+    sample_name <- name
+    outfile <- file.path(out_dir, paste0("mean_var_before_normalisation_", sample_name, ".png"))
+    ggsave(outfile, p)
+    }
   # remove df aswell
   rm(df, gene_means, gene_vars, p)
 }
@@ -392,10 +432,16 @@ Do quickcluster for all singleCellExperiments then compute sizefactors
 ```{r}
 set.seed(42)
 if (FALSE) {
-  sce_list <- lapply(sce_list, function(sce) {
+  sce_list <- lapply(seq_along(sce_list), function(i) {
+    sce <- sce_list[[i]]
     cl <- quickCluster(sce, assay.type = "counts")
     sce <- computeSumFactors(sce, clusters = cl, assay.type = "counts")
-    plot(
+    
+    sample_name <- names(sce_list)[i]
+    outfile <- file.path(out_dir, paste0("deconvoluted_sizefactors_", sample_name, ".png"))
+    
+    png(outfile, width = 800, height = 600)
+    p <- plot(
       librarySizeFactors(sce, assay.type = "counts"),
       sizeFactors(sce),
       xlab = "Library size factor",
@@ -405,6 +451,9 @@ if (FALSE) {
       col = as.integer(factor(cl))
     )
     abline(a = 0, b = 1, col = "red")
+    
+    dev.off()
+    
     sce
   })
 }
@@ -429,14 +478,21 @@ if (FALSE) {
 ```{r}
 if (FALSE) {
   for (name in names(sce_list)) {
-  sce <- sce_list[[name]]
-  dec <- modelGeneVar(sce)
-  varfit <- metadata(dec)
-  plot(varfit$mean, varfit$var, 
-      xlab="Mean of log-expression",
-      ylab="Variance of log-expression")
-  curve(varfit$trend(x), col="dodgerblue", add=TRUE, lwd=2)
-  rm(sce, dec, varfit)
+    sce <- sce_list[[name]]
+    dec <- modelGeneVar(sce)
+    varfit <- metadata(dec)
+    
+    sample_name <- name
+    outfile <- file.path(out_dir, paste0("mean_var_after_normalisation_", sample_name, ".png"))
+    
+    png(outfile, width = 800, height = 600)
+    plot(varfit$mean, varfit$var, 
+        xlab="Mean of log-expression",
+        ylab="Variance of log-expression")
+    curve(varfit$trend(x), col="dodgerblue", add=TRUE, lwd=2)
+    
+    dev.off()
+    rm(sce, dec, varfit)
     }
   }
 ```
@@ -750,9 +806,9 @@ sce_copy <- sce
 batch correction options:
 
 - **linear modelling**,eg removeBatchEffect from limma, regressBatches from batchelor):
-fits linear model trhough gene expression profile with batch term and then recomputing the observations without the batch effect
+fits linear model through gene expression profile with batch term and then recomputing the observations without the batch effect
 not good because assumes that composition of cell subpopulations is the same across batches
-However, it is possible to take up cell type as factor in linear modelling (design parameter) --> could be good option
+
 
 - **rescaleBatches** from batchelor
 roughly equivalent to applying linear regression, also assumes constant composition -> not good
@@ -760,11 +816,6 @@ roughly equivalent to applying linear regression, also assumes constant composit
 - **MNN correction**, eg fastMNN from batchelor
 Finds nearest neighbor cell pairs between different batches --> assumes these cells are from the same biological state. Batch effect is estimated by the difference between these nearest neighbors. Does not assume that the population composition is the same or known beforehand. Key assumption is that the batch effect is orthogonal to the biology, usually reasonable as random vector is likely orthogonal --> could also be good option, but I am not sure if its a problem for this algorithm that not all celltypes are present in all datasets
 
-
-## Batch correction with linear modelling - 
-
-One think to keep in mind with this method, is that if a celltypes occurs only in a few batches or/and in low number in those batches the correction will be unstable. 
-Therefore
 
 Visualisation of overlap
 ```{r}
@@ -781,169 +832,7 @@ cell_types_df <- as.data.frame(cell_types) |>
 #saveRDS(cell_types_df, file = file.path(out_dir, "_overlap.rds"))
 cell_types_df
 ```
-
-QuickCorrect function performs data set up steps:
-- subsets all batches to common "universe" of features (dont really understand what this means)
-- rescaling and within dataset normalisation to get logcounts
-- feature selection to get hvgs
-and then performs batch correction according to specified PARAM
-```{r}
-set.seed(73928)
-
-correct_lm <- quickCorrect(
-  sce, 
-  batch = sce$Dataset,
-  assay.type = "counts",   # expects counts assay not logcounts
-  PARAM = RegressParam(    # use regressBatches as batch correction
-    design = model.matrix(~ 0 + sce$Celltype) # no intercept
-  )
-)
-
-assay(sce, "corrected_lm") <- assay(correct_lm$corrected) 
-rm(correct_lm)
-```
-?maybe do visualisation on correct_lm$dec?
-
-
-Visualisation with TSNEs of batch corrected data
-
-
-```{r}
-# using top 10% of all genes
-if (FALSE) {
-  sce <- runPCA(sce,
-                exprs_values = "corrected_lm",
-                subset_row = chosen.hvgs)
-  
-  percent.var <- attr(reducedDim(sce, "PCA"), "percentVar")
-  chosen.elbow <- findElbowPoint(percent.var)
-  
-  p <- plot_pca_variances(sce) + 
-    geom_vline(xintercept = chosen.elbow, color = "red")
-  ggsave(here("plots_and_figures", "PCA_explVar_corrected_lm.png"), p)
-}
-```
-
-```{r}
-# saving because runTSNE takes long
-if (FALSE) {
-  sce <- runTSNE(sce, dimred = "PCA", ntop = chosen.elbow)
-  saveRDS(sce, file = "corrected_lm_RedDim.rds")
-} else {
-  sce <- readRDS("corrected_lm_RedDim.rds")
-}
-```
-
-```{r}
-TSNE_df2 <- data.frame(
-  TSNE1 = reducedDims(sce)$TSNE[,1],
-  TSNE2 = reducedDims(sce)$TSNE[,2],
-  celltype = sce$Celltype, 
-  dataset = sce$Dataset,
-  tissue = sce$Tissue
-)
-```
-
-```{r}
-if (FALSE) {
-  saveRDS(TSNE_df2, file = "TSNE_df2.rds")
-} else {
-  TSNE_df2 <- readRDS("TSNE_df2.rds")
-}
-```
-
-General TSNE plot
-```{r}
-tsne_batchcorlm_dataset <- TSNE_df2 %>%
-  ggplot(aes(x = TSNE1, y = TSNE2, color = dataset)) +
-    geom_point(size = 0.01, alpha = 0.1) +
-    labs(x = "TSNE1", y = "TSNE2") +
-    guides(                                   # separate aes for legend 
-      color = guide_legend(override.aes = list(size=3, alpha = 1))
-    )
-
-tsne_batchcorlm_celltype <- TSNE_df2 %>%
-  ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
-    geom_point(size = 0.01, alpha = 0.1) +
-    scale_color_manual(values = color_vec) +
-    labs(x = "TSNE1", y = "TSNE2") +
-    guides(                                     # separate aes for legend dots
-      color = guide_legend(override.aes = list(size=3, alpha = 1))
-    ) +
-    theme(
-      legend.text = element_text(size = 8),     # textsize of legend elements
-      legend.key.size = unit(0.3, "cm")) # boxsize of legend elements
-outfile <- file.path(out_dir, paste0("tsne_batchcorlm_dataset", ".png"))
-ggsave(outfile, tsne_batchcorlm_dataset)
-outfile <- file.path(out_dir, paste0("tsne_batchcorlm_celltype", ".png"))
-ggsave(outfile, tsne_batchcorlm_celltype)
-c(tsne_batchcorlm_dataset, tsne_batchcorlm_celltype)
-```
-borders between dataset clusters a bit blurred, but still very apparent dataset effect. Little clustering on celltype
-
-```{r}
-tsne_batchcorlm_leaf_dataset <- TSNE_df2 %>%
-  filter(str_detect(tissue, "Leaf")) %>%      # plot leaf datasets
-  group_by(celltype) %>%                      
-  filter(n_distinct(dataset) > 1) %>%
-  ungroup() %>%
-  ggplot(aes(x = TSNE1, y = TSNE2, color = dataset)) +
-    geom_point(size = 0.01, alpha = 0.1) +
-    labs(x = "TSNE1", y = "TSNE2") +
-    guides(                                   # separate aes for legend 
-      color = guide_legend(override.aes = list(size=3, alpha = 1))
-    ) 
-tsne_batchcorlm_leaf_celltype <- TSNE_df2 %>%
-  filter(str_detect(tissue, "Leaf")) %>%      # plot leaf datasets
-  group_by(celltype) %>%
-  filter(n_distinct(dataset) > 1) %>% 
-  ungroup() %>%
-  ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
-    geom_point(size = 0.01, alpha = 0.1) +
-    labs(x = "TSNE1", y = "TSNE2") +
-    guides(                                   # separate aes for legend 
-      color = guide_legend(override.aes = list(size=3, alpha = 1))
-    )
-outfile <- file.path(out_dir, paste0("tsne_batchcorlm_leaf_dataset", ".png"))
-ggsave(outfile, tsne_batchcorlm_leaf_dataset)
-outfile <- file.path(out_dir, paste0("tsne_batchcorlm_leaf_celltype", ".png"))
-ggsave(outfile, tsne_batchcorlm_leaf_celltype)
-c(tsne_batchcorlm_leaf_dataset, tsne_batchcorlm_leaf_celltype)
-```
-looks a little better, mesophyll clusters together a bit. For the rest still bad
-
-
-```{r}
-tsne_batchcorlm_root_dataset <- TSNE_df2 %>%
-  filter(str_detect(tissue, "Root")) %>%      # plot root datasets
-  group_by(celltype) %>%                      
-  filter(n_distinct(dataset) > 1) %>%
-  ungroup() %>%
-  ggplot(aes(x = TSNE1, y = TSNE2, color = dataset)) +
-    geom_point(size = 0.01, alpha = 0.1) +
-    labs(x = "TSNE1", y = "TSNE2") +
-    guides(                                   # separate aes for legend 
-      color = guide_legend(override.aes = list(size=3, alpha = 1))
-    ) 
-
-tsne_batchcorlm_root_celltype <- TSNE_df2 %>%
-  filter(str_detect(tissue, "Root")) %>%      # plot root datasets
-  group_by(celltype) %>%
-  filter(n_distinct(dataset) > 1) %>% 
-  ungroup() %>%
-  ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
-    geom_point(size = 0.01, alpha = 0.1) +
-    labs(x = "TSNE1", y = "TSNE2") +
-    guides(                                   # separate aes for legend 
-      color = guide_legend(override.aes = list(size=3, alpha = 1))
-    )
-outfile <- file.path(out_dir, paste0("tsne_batchcorlm_root_dataset", ".png"))
-ggsave(outfile, tsne_batchcorlm_root_dataset)
-outfile <- file.path(out_dir, paste0("tsne_batchcorlm_root_celltype", ".png"))
-ggsave(outfile, tsne_batchcorlm_root_celltype)
-c(tsne_batchcorlm_root_dataset, tsne_batchcorlm_root_celltype)
-```
-Does not look any better
+composition of celltypes among different datasets is defenitely not constant --> cannot use regressBatches or rescaleBatches
 
 
 ## Batch correction with MNN
