@@ -12,3 +12,6 @@ chapters/TSNE_df2.rds
 chapters/corrected_mnn_RedDim.rds
 chapters/corrected_mnn.rds
 plots_and_figures/
+.RDataTmp
+chapters/PCA_dimred_mnn.rds
+chapters/TSNE_df2_mnn.rds

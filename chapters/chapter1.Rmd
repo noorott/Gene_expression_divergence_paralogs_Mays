@@ -563,7 +563,6 @@ The different datasets are now combined into one single cell experiment object. 
 ## Pre-correction Visualization with TSNE plots
 
 Before applying batch correction is performed, the data is visualized with TSNE plots. This way the effect of batch correction can be examined trough comparison
-
 ```{r}
 # Feature selection for dimensionality reduction: want genes that are 
 # informative of the biological structure of the data
@@ -972,83 +971,138 @@ if (FALSE) {mnn.out <- fastMNN(assay(sce_copy, 'counts'),
 --> not possible to put the assay of mnn.out in sce_copy because the dimensions are not the same and when making a new singleCellExperiment, you get 57.3GB, so not possible 
 
 ```{r}
-#deze is niet nodig 
-#set.seed(0010101010)
-#if (TRUE) {
- # mnn.out <- runTSNE(mnn.out, dimred="corrected")
-  #mnn.out$batch <- factor(mnn.out$batch)
-  #saveRDS(mnn.out, file = "corrected_mnn_RedDim.rds")
-#} else {
- # mnn.out <- readRDS("corrected_mnn_RedDim.rds")
-#}
+if (FALSE) {
+  sce2 <- runPCA(mnn.out,
+                exprs_values = "reconstructed",
+                subset_row = chosen.hvgs)
+  percent.var <- attr(reducedDim(sce2, "PCA"), "percentVar")
+  chosen.elbow <- findElbowPoint(percent.var)
+  saveRDS(sce2, file = "PCA_dimred_mnn.rds")
+  p2 <- plot_pca_variances(sce2) + 
+    geom_vline(xintercept = chosen.elbow, color = "red")
+  ggsave(here("plots_and_figures", "PCA_explVar_corrected_mnn.png"), p2)
+} else {
+  sce2 <- readRDS("PCA_dimred_mnn.rds")
+}
 ```
+
+```{r}
+if (FALSE) {
+  sce2 <- runTSNE(sce2, dimred = "PCA", ntop = chosen.elbow)
+  saveRDS(sce2, file = "corrected_mnn_RedDim.rds")
+} else {
+  sce2 <- readRDS("corrected_mnn_RedDim.rds")
+}
+```
+
+```{r}
+TSNE_df2_mnn <- data.frame(
+  TSNE1 = reducedDims(sce2)$TSNE[,1],
+  TSNE2 = reducedDims(sce2)$TSNE[,2],
+  celltype = sce$Celltype, 
+  dataset = sce$Dataset,
+  tissue = sce$Tissue
+)
+```
+
+```{r}
+if (FALSE) {
+  saveRDS(TSNE_df2_mnn, file = "TSNE_df2_mnn.rds")
+} else {
+  TSNE_df2_mnn <- readRDS("TSNE_df2_mnn.rds")
+}
+```
+
 
 plot to check that celltypes cluster together   
 ```{r}
-reducedDim(sce_copy, "corrected") <- reducedDim(mnn.out, "corrected")
-set.seed(123)
-sce_copy <- runTSNE(sce_copy, dimred = "corrected")
-tsne_batchcormnn_celltype <- plotTSNE(sce_copy, colour_by = "Celltype") +
-  scale_color_manual(values = color_vec) +
-  labs(colour = 'Celltype')
-tsne_batchcormnn_dataset <- plotTSNE(sce_copy, colour_by = "Dataset") +
-  scale_color_manual(values = color_vec) +
-  labs(colour = 'Dataset')
-tsne_batchcormnn_celltype
-tsne_batchcormnn_dataset
-if (FALSE){outfile <- file.path(out_dir, paste0("tsne_batchcormnn_celltype", ".png"))
-ggsave(outfile, tsne_batchcormnn_celltype)
-outfile <- file.path(out_dir, paste0("tsne_batchcormnn_dataset", ".png"))
-ggsave(outfile, tsne_batchcormnn_dataset)}
+tsne_batchcormnn_dataset <- TSNE_df2_mnn %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = dataset)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    )
+
+tsne_batchcormnn_celltype <- TSNE_df2_mnn %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    scale_color_manual(values = color_vec) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                     # separate aes for legend dots
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    ) +
+    theme(
+      legend.text = element_text(size = 8),     # textsize of legend elements
+      legend.key.size = unit(0.3, "cm")) # boxsize of legend elements
+if (FALSE) {outfile <- file.path(out_dir, paste0("tsne_batchcormnn_dataset", ".png"))
+ggsave(outfile, tsne_batchcormnn_dataset)
+outfile <- file.path(out_dir, paste0("tsne_batchcormnn_celltype", ".png"))
+ggsave(outfile, tsne_batchcormnn_celltype)}
+c(tsne_batchcormnn_dataset, tsne_batchcormnn_celltype)
 ```
 ```{r}
-# subset voor leaf
-leaf_categories <- c("Leaf")
-sce_leaf <- sce_copy[, sce_copy$Tissue %in% leaf_categories]
-table(sce_leaf$Tissue)
-
-tsne_batchcormnn_leaf_celltype <- plotTSNE(sce_leaf, colour_by = "Celltype") +
-  scale_color_manual(values = color_vec) +
-  labs(colour = "Celltype") +
-  guides(colour = guide_legend(override.aes = list(size = 3, alpha = 1)))
-tsne_batchcormnn_leaf_dataset <- plotTSNE(sce_leaf, colour_by = "Dataset") +
-  scale_color_manual(values = color_vec) +
-  labs(colour = "Dataset") +
-  guides(colour = guide_legend(override.aes = list(size = 3, alpha = 1)))
-tsne_leaf_celltype
-tsne_leaf_dataset
-if (FALSE) {
-  outfile1 <- file.path(out_dir, "tsne_batchcormnn_leaf_celltype.png")
-  ggsave(outfile1, tsne_batchcormnn_leaf_celltype, width = 8, height = 6, dpi = 300)
-
-  outfile2 <- file.path(out_dir, "tsne_batchcormnn_leaf_dataset.png")
-  ggsave(outfile2, tsne_batchcormnn_leaf_dataset, width = 8, height = 6, dpi = 300)
-}
-
+tsne_batchcormnn_leaf_dataset <- TSNE_df2_mnn %>%
+  filter(str_detect(tissue, "Leaf")) %>%      # plot leaf datasets
+  group_by(celltype) %>%                      
+  filter(n_distinct(dataset) > 1) %>%
+  ungroup() %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = dataset)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    ) 
+tsne_batchcormnn_leaf_celltype <- TSNE_df2_mnn %>%
+  filter(str_detect(tissue, "Leaf")) %>%      # plot leaf datasets
+  group_by(celltype) %>%
+  filter(n_distinct(dataset) > 1) %>% 
+  ungroup() %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    )
+outfile <- file.path(out_dir, paste0("tsne_batchcormnn_leaf_dataset", ".png"))
+ggsave(outfile, tsne_batchcormnn_leaf_dataset)
+outfile <- file.path(out_dir, paste0("tsne_batchcormnn_leaf_celltype", ".png"))
+ggsave(outfile, tsne_batchcormnn_leaf_celltype)
+c(tsne_batchcormnn_leaf_dataset, tsne_batchcormnn_leaf_celltype)
 ```
+
+
+
 ```{r}
-# subset Root
-sce_root <- sce_copy[, sce_copy$Tissue == "Root tip"]
-table(sce_root$Tissue)
-tsne_batchcormnn_root_celltype <- plotTSNE(sce_root, colour_by = "Celltype") +
-  scale_color_manual(values = color_vec) +
-  labs(colour = "Celltype") +
-  guides(colour = guide_legend(override.aes = list(size = 3, alpha = 1)))
-tsne_batchcormnn_root_dataset <- plotTSNE(sce_root, colour_by = "Dataset") +
-  scale_color_manual(values = c("red", "blue")) +  # hier de kleuren instellen
-  labs(colour = "Dataset") +
-  guides(colour = guide_legend(override.aes = list(size = 3, alpha = 1)))
-tsne_batchcormnn_root_celltype
-tsne_batchcormnn_root_dataset
-if (TRUE) {
-  outfile1 <- file.path(out_dir, "tsne_batchcormnn_root_celltype.png")
-  ggsave(outfile1, tsne_batchcormnn_root_celltype, width = 8, height = 6, dpi = 300)
+tsne_batchcormnn_root_dataset <- TSNE_df2_mnn %>%
+  filter(str_detect(tissue, "Root")) %>%      # plot root datasets
+  group_by(celltype) %>%                      
+  filter(n_distinct(dataset) > 1) %>%
+  ungroup() %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = dataset)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    ) 
 
-  outfile2 <- file.path(out_dir, "tsne_batchcormnn_root_dataset.png")
-  ggsave(outfile2, tsne_batchcormnn_root_dataset, width = 8, height = 6, dpi = 300)
-}
+tsne_batchcormnn_root_celltype <- TSNE_df2_mnn %>%
+  filter(str_detect(tissue, "Root")) %>%      # plot root datasets
+  group_by(celltype) %>%
+  filter(n_distinct(dataset) > 1) %>% 
+  ungroup() %>%
+  ggplot(aes(x = TSNE1, y = TSNE2, color = celltype)) +
+    geom_point(size = 0.01, alpha = 0.1) +
+    labs(x = "TSNE1", y = "TSNE2") +
+    guides(                                   # separate aes for legend 
+      color = guide_legend(override.aes = list(size=3, alpha = 1))
+    )
+outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_dataset", ".png"))
+ggsave(outfile, tsne_batchcormnn_root_dataset)
+outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_celltype", ".png"))
+ggsave(outfile, tsne_batchcormnn_root_celltype)
+c(tsne_batchcormnn_root_dataset, tsne_batchcormnn_root_celltype)
 ```
-
 
 TO DO: 
 
