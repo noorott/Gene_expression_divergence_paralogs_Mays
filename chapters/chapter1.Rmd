@@ -25,6 +25,7 @@ library(DelayedArray)
 library(ragg) #to save plots 
 library(scater)
 library(PCAtools)
+library(flextable)
 ```
 
 ##################
@@ -833,6 +834,94 @@ cell_types_df <- as.data.frame(cell_types) |>
 cell_types_df
 ```
 composition of celltypes among different datasets is defenitely not constant --> cannot use regressBatches or rescaleBatches
+
+```{r}
+cell_types_long <- as.data.frame(cell_types) |>
+  pivot_longer(
+    cols = everything(),
+    names_to = "Dataset",
+    values_to = "CellType"
+  ) |>
+  filter(!CellType %in% c("/", "Unknown", "Unknow", "Contamination"))
+
+dataset_pairs <- expand_grid(
+  Dataset_1 = unique(cell_types_long$Dataset),
+  Dataset_2 = unique(cell_types_long$Dataset)
+) |>
+  filter(Dataset_1 < Dataset_2)  # vermijd dubbele & zelf-comparisons
+
+pairwise_overlap <- dataset_pairs |>
+  rowwise() |>
+  mutate(
+    Shared_CellTypes = list(
+      intersect(
+        cell_types_long$CellType[cell_types_long$Dataset == Dataset_1],
+        cell_types_long$CellType[cell_types_long$Dataset == Dataset_2]
+      )
+    ),
+    `# Shared Cell Types` = length(Shared_CellTypes),
+    Overlap = `# Shared Cell Types` > 0
+  ) |>
+  ungroup() |>
+  mutate(
+    `Shared Cell Types` = sapply(Shared_CellTypes, paste, collapse = ", ")
+  ) |>
+  select(
+    Dataset_1,
+    Dataset_2,
+    `# Shared Cell Types`,
+    `Shared Cell Types`,
+    Overlap
+  )
+
+ft_pairs <- flextable(pairwise_overlap) |>
+  autofit() |>
+  theme_vanilla()
+
+save_as_docx(ft_pairs, path = "pairwise_dataset_overlap.docx")
+ft_pairs
+```
+```{r}
+library(igraph)
+g <- graph_from_data_frame(
+  pairwise_overlap |>
+    filter(Overlap) |>
+    select(Dataset_1, Dataset_2),
+  directed = FALSE
+)
+
+cliques <- maximal.cliques(g)
+
+dataset_overlap_sets <- tibble(
+  Set_ID = seq_along(cliques),
+  Datasets = sapply(
+    cliques,
+    function(x) paste(V(g)$name[x], collapse = ", ")
+  ),
+  `# Datasets in Set` = sapply(cliques, length)
+) |>
+  arrange(desc(`# Datasets in Set`))
+
+ft_sets <- flextable(dataset_overlap_sets) |>
+  autofit() |>
+  theme_vanilla()
+
+save_as_docx(ft_sets, path = "dataset_overlap_sets.docx")
+ft_sets
+```
+```{r}
+dataset_in_overlap_set <- tibble(
+  Dataset = unique(c(pairwise_overlap$Dataset_1, pairwise_overlap$Dataset_2))
+) |>
+  mutate(
+    In_Overlap_Set = Dataset %in%
+      unique(unlist(lapply(cliques, function(x) V(g)$name[x])))
+  ) |>
+  arrange(desc(In_Overlap_Set), Dataset)
+
+dataset_in_overlap_set
+```
+Transitive connectivity between datasets is sufficient, meaning that not every dataset pair is required to share a cell type directly, as long as all datasets are connected through a chain of overlapping cell types. The assumption of overlap between datasets is met, we can do MNN
 
 ## Batch correction with MNN
 start from uncorrected sce again, or work with counts in corrected sce 

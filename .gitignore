@@ -15,3 +15,5 @@ plots_and_figures/
 .RDataTmp
 chapters/PCA_dimred_mnn.rds
 chapters/TSNE_df2_mnn.rds
+chapters/dataset_overlap_sets.docx
+chapters/pairwise_dataset_overlap.docx
