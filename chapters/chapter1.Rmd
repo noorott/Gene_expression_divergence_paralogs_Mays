@@ -930,6 +930,7 @@ outfile <- file.path(out_dir, paste0("tsne_batchcormnn_celltype", ".png"))
 ggsave(outfile, tsne_batchcormnn_celltype)}
 c(tsne_batchcormnn_dataset, tsne_batchcormnn_celltype)
 ```
+
 ```{r}
 tsne_batchcormnn_leaf_dataset <- TSNE_df2_mnn %>%
   filter(str_detect(tissue, "Leaf")) %>%      # plot leaf datasets
@@ -953,10 +954,10 @@ tsne_batchcormnn_leaf_celltype <- TSNE_df2_mnn %>%
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     )
-outfile <- file.path(out_dir, paste0("tsne_batchcormnn_leaf_dataset", ".png"))
+if (FALSE) {outfile <- file.path(out_dir, paste0("tsne_batchcormnn_leaf_dataset", ".png"))
 ggsave(outfile, tsne_batchcormnn_leaf_dataset)
 outfile <- file.path(out_dir, paste0("tsne_batchcormnn_leaf_celltype", ".png"))
-ggsave(outfile, tsne_batchcormnn_leaf_celltype)
+ggsave(outfile, tsne_batchcormnn_leaf_celltype)}
 c(tsne_batchcormnn_leaf_dataset, tsne_batchcormnn_leaf_celltype)
 ```
 
@@ -986,10 +987,10 @@ tsne_batchcormnn_root_celltype <- TSNE_df2_mnn %>%
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     )
-outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_dataset", ".png"))
+if (FALSE) {outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_dataset", ".png"))
 ggsave(outfile, tsne_batchcormnn_root_dataset)
 outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_celltype", ".png"))
-ggsave(outfile, tsne_batchcormnn_root_celltype)
+ggsave(outfile, tsne_batchcormnn_root_celltype)}
 c(tsne_batchcormnn_root_dataset, tsne_batchcormnn_root_celltype)
 ```
 
