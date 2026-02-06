@@ -619,7 +619,7 @@ The different datasets are now combined into one single cell experiment object. 
 
 ## Pre-correction Visualization with TSNE plots
 
-Before applying batch correction is performed, the data is visualized with TSNE plots. This way the effect of batch correction can be examined trough comparison
+Before batch correction is performed, the data is visualized with TSNE plots. This way the effect of batch correction can be examined trough comparison with later TSNE plots
 ```{r}
 # Feature selection for dimensionality reduction: want genes that are 
 # informative of the biological structure of the data
@@ -941,7 +941,10 @@ if (FALSE) {mnn.out <- fastMNN(assay(sce_copy, 'counts'),
                                BSPARAM=BiocSingular::RandomParam(deferred=TRUE), 
                                auto.merge = TRUE)
   saveRDS(mnn.out, file = "corrected_mnn.rds")
-} else {mnn.out <- readRDS("corrected_mnn.rds")}
+} else {
+  mnn.out <- readRDS("corrected_mnn.rds")
+}
+
 #hier wil je de assay uit mnn.out in sce_copy krijgen om daar dan de TSNE op te laten lopen
 #assay(sce_copy, "reconstructed") <- assay(mnn.out$reconstructed) 
 ```
@@ -1089,7 +1092,7 @@ tsne_batchcormnn_root_celltype <- TSNE_df2_mnn %>%
   theme(legend.position = "none") + 
   ggtitle("Coloured by celltype")
 
-if (FALSE){outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_dataset", ".png"))
+if (TRUE){outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_dataset", ".png"))
 ggsave(outfile, tsne_batchcormnn_root_dataset)
 outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_celltype", ".png"))
 ggsave(outfile, tsne_batchcormnn_root_celltype)}
