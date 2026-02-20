@@ -51,11 +51,15 @@ summarized_sce <- aggregateAcrossCells(
   store.number = "ncells")                   # store number of cells 
 ```
 
+```{r}
+rm(sce)
+```
 
 
 
 QUESTIONS:
 ??? not sure whether to summarize across Celltype_Tissue, _Dataset or _Organ ??? (line 23-40)
+? still need counts, or only work with logcounts
 
 
 
