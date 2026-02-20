@@ -1,0 +1,8 @@
+---
+title: 'Chapter 2: Data summary'
+author: "Eli Galle"
+date: "2026-02-20"
+output: html_document
+---
+
+
