@@ -1,6 +1,10 @@
 ---
 title: "Chapter 1: Data Prepreration"
-author: "Noor Ottevaere"
+authors: 
+"Eli Galle,
+Emmeline Van Rijswijck,
+Noor Ottevaere,
+Woowon Jang"
 date: "2025-11-15"
 output: html_document
 ---
