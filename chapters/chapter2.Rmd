@@ -5,4 +5,67 @@ date: "2026-02-20"
 output: html_document
 ---
 
+In this chapter we will summarize the processed data from chapter 1, enabling further analysis.
+
+Loading libraries
+```{r}
+library(SingleCellExperiment)
+library(scuttle)
+library(stringr)
+```
+
+
+As the quality of batch correction was not satisfactory, we will work further with uncorrected counts. This will have to be taken into account in subsequent analysis.
+```{r}
+sce <- readRDS("uncorrected_sce_RedDim.rds")
+```
+
+First we will make a new colData variable indicating the cell type and tissue combination for each cell. This is the variable across we will summarize our counts
+
+
+```{r}
+# string manipulation to make resulting variable more readable
+# eg "RootCap_RootTip" in stead of "Root cap_Root tip"
+
+celltypes <- sce$Celltype %>%
+  str_to_title() %>%
+  str_remove_all(" ")
+
+tissues <- sce$Tissue %>%
+  str_to_title() %>%
+  str_remove_all(" ")
+
+# create new colData variable
+sce$Celltype_Tissue <- paste(celltypes, tissues, sep="_")
+
+rm(celltypes, tissues)
+```
+
+Summarize/aggregate counts across Celltype_Tissue
+```{r}
+summarized_sce <- aggregateAcrossCells(
+  sce, 
+  ids = sce$Celltype_Tissue,
+  use.assay.type = c("counts","logcounts"),
+  statistics = c("sum", "mean", "median"),
+  store.number = "ncells")                   # store number of cells 
+```
+
+
+
+
+QUESTIONS:
+??? not sure whether to summarize across Celltype_Tissue, _Dataset or _Organ ??? (line 23-40)
+
+
+
+
+
+
+
+
+
+
+
+
 
