@@ -23,7 +23,6 @@ library(tidyr)
 library(ggplot2) 
 library(DelayedArray)
 library(ragg) #to save plots 
-library(scater)
 library(PCAtools)
 library(flextable)
 ```
