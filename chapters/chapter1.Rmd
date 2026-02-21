@@ -1,5 +1,5 @@
 ---
-title: "Chapter 1: Data Prepreration"
+title: "Chapter 1: Expression Data Acquisition and Preprocessing"
 authors: 
 "Eli Galle,
 Emmeline Van Rijswijck,
@@ -8,6 +8,8 @@ Woowon Jang"
 date: "2025-11-15"
 output: html_document
 ---
+
+In this chapter we will download and preprocess single cell expression data retrieved from the Single Cell Plant DataBase (scPlandDB).
 
 ```{r, message=FALSE}
 library(zellkonverter)
@@ -23,12 +25,11 @@ library(scran)
 library(batchelor)
 library(DropletUtils)
 library(Rtsne)
-library(tidyr) 
-library(ggplot2) 
 library(DelayedArray)
 library(ragg) #to save plots 
 library(PCAtools)
 library(flextable)
+library(stringr)
 ```
 
 ##################
@@ -122,6 +123,7 @@ sce_info_plot <- sce_info_tidy2 %>%
   ) 
 sce_info_plot
 ```
+
 Save the plots and figures in a folder 
 ```{r}
 if (FALSE) {
@@ -129,6 +131,7 @@ if (FALSE) {
   ggsave(filename = outfile, plot = sce_info_plot)
   }
 ```
+
 Check annotated celltypes in datasets
 ```{r}
 cell_types <- sapply(sce_list, function(x){
@@ -139,26 +142,28 @@ cell_types <- sapply(sce_list, function(x){
 cell_types <- as.data.frame(cell_types)
 cell_types
 ```
-Possible problems to keep in mind for downstream analysis:
+
+Possible problems with cell types to keep in mind for downstream analysis:
 - contamination and unknown
-  --> both removed
-- SRP224648 and SRP281914: only 2 celltypes; not really enough to define REB
-  --> dont use for individual dataset analysis (but do use for total)
-- SRP325657_1: only 3 celltypes
+  --> will be removed
+- SRP224648 and SRP281914: only 2 cell types; not really enough to define REB
+  --> don't use for individual dataset analysis (but do use for total)
+- SRP325657_1: only 3 cell types
   --> enough for individual analysis
 - SRP325657_2: Pavement cell-N and Pavement cell-A	 
     PCs-A: PCs with active anthocyanin biosynthesis
     PCs-N: PCs lacking active anthocyanin biosynthesis
-    natural celltypes (not transformed), so both can be used
-- SRP417893: leaf rim; dubious celltype
-    "Here we use single-cell RNA-sequencing analyses to identify a ‘rim’ cell type 
+    Both are natural celltypes (not transformed) and are thus retained
+- SRP417893: leaf rim; dubious cell type
+    Paper: "Here we use single-cell RNA-sequencing analyses to identify a ‘rim’ cell type 
     present at the margins of maize leaf primordia. Cells in the leaf rim have a 
     distinctive identity and share transcriptional signatures with proliferating 
     ligule cells"
-    can probably be seen as valid celltype, otherwise merged with leaf primordium
+    Can be seen as valid cell types.
+    
 - resolution problem; 
-  some datasets have more celltypes simply because higher resolution or more 
-  similar celltypes
+  some datasets have more cell types simply because higher resolution or more 
+  similar cell types
   eg SRP272727_23_26; multiple meristem subcategories
   eg SRP266308_1; vascular tissue <-> other; xylem & phloem
   -->
@@ -180,7 +185,7 @@ for (i in 1:length(sce_list)) {
     }
 } 
 ```
-PCA plot of each data set colored by celltype
+PCA plot of each data set colored by cell type
 ```{r}
 for (i in 1:length(sce_list)) {
   plot <- plotReducedDim(sce_list[[i]], dimred = "PCA", colour_by = "Celltype") +
@@ -619,6 +624,11 @@ sce <- do.call(cbind, sce_list)
 rm(sce_list)
 ```
 The different datasets are now combined into one single cell experiment object. To remove technical variation between datasets, batch correction should be performed
+
+
+######################
+## Batch correction ##
+######################
 
 ## Pre-correction Visualization with TSNE plots
 
@@ -1102,15 +1112,59 @@ ggsave(outfile, tsne_batchcormnn_root_celltype)}
 c(tsne_batchcormnn_root_dataset, tsne_batchcormnn_root_celltype)
 ```
 
+
+##################
+## Data summary ##
+##################
+
+We will summarize the data across cell type and organ, enabling further analysis.
+
+
+As the quality of batch correction was not satisfactory, we will work further with uncorrected counts. This will have to be taken into account in subsequent analysis.
+```{r}
+sce <- readRDS("uncorrected_sce_RedDim.rds")
+```
+
+First we will make a new colData variable indicating the cell type and organ combination for each cell. This is the variable across we will summarize our counts. 
+```{r}
+# string manipulation to make resulting variable more readable
+# eg "RootCap_RootShoot" in stead of "Root cap_Root Shoot"
+
+celltypes <- sce$Celltype %>%
+  str_to_title() %>%
+  str_remove_all(" ")
+
+organs <- sce$Organ %>%
+  str_to_title() %>%
+  str_remove_all(" ")
+
+# cell types annotated as being a certain cell phase will be grouped together
+# with the Stem cell niche cell type
+celltypes[celltypes %in% c("SPhase", "G2/MPhase")] <- "StemCellNiche"
+
+# create new colData variable
+sce$Celltype_Organ <- paste(celltypes, organs, sep="_")
+
+rm(celltypes, organs)
+```
+
+Summarize/aggregate counts across Celltype_Tissue
+```{r}
+summarized_sce <- aggregateAcrossCells(
+  sce, 
+  ids = sce$Celltype_Organ,
+  use.assay.type = c("counts","logcounts"),
+  statistics = c("sum", "mean", "median"),
+  store.number = "ncells")                   # store number of cells 
+```
+
+Save as RDS
+```{r}
+saveRDS(summarized_sce, file = "summarized_sce.rds")
+```
+
+
 TO DO: 
-
--Redo analysis with normalized counts from quickcluster --> done
--Redo all TSNEs, only using the best PCs from PCA, also redo PCAs for it with 
-top 10% of hvg instead of top 1000 
-  - batch correction lm method --> removed because not good? 
-  - batch corretion MNN method --> done
-
-- make matrix aggregating counts per celltype by mean, median, sum
 - investigate what n_experiments is (see line 56), if these are multiple samples within each dataset we might have to correct for batch effects within each dataset aswell?
 
 

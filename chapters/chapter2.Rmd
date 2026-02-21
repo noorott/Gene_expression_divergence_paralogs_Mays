@@ -1,75 +1,267 @@
 ---
-title: 'Chapter 2: Data summary'
-author: "Eli Galle"
-date: "2026-02-20"
+title: "Chapter 2: Paralog Data Acquisition"
+author: "Woowon Jang"
+date: "`r Sys.Date()`"
 output: html_document
 ---
 
-In this chapter we will summarize the processed data from chapter 1, enabling further analysis.
-
-Loading libraries
+# 1 Environment settings
+## 1.1 Load packages
 ```{r}
-library(SingleCellExperiment)
-library(scuttle)
+library(here)
+library(tidyverse)
+library(SpatialExperiment)
+library(SummarizedExperiment)
+library(DESpace)
+library(patchwork)
+library(dplyr)
+library(tibble)
+library(Matrix)
 library(stringr)
-```
-
-
-As the quality of batch correction was not satisfactory, we will work further with uncorrected counts. This will have to be taken into account in subsequent analysis.
-```{r}
-sce <- readRDS("uncorrected_sce_RedDim.rds")
-```
-
-First we will make a new colData variable indicating the cell type and tissue combination for each cell. This is the variable across we will summarize our counts
-
-
-```{r}
-# string manipulation to make resulting variable more readable
-# eg "RootCap_RootTip" in stead of "Root cap_Root tip"
-
-celltypes <- sce$Celltype %>%
-  str_to_title() %>%
-  str_remove_all(" ")
-
-tissues <- sce$Tissue %>%
-  str_to_title() %>%
-  str_remove_all(" ")
-
-# create new colData variable
-sce$Celltype_Tissue <- paste(celltypes, tissues, sep="_")
-
-rm(celltypes, tissues)
-```
-
-Summarize/aggregate counts across Celltype_Tissue
-```{r}
-summarized_sce <- aggregateAcrossCells(
-  sce, 
-  ids = sce$Celltype_Tissue,
-  use.assay.type = c("counts","logcounts"),
-  statistics = c("sum", "mean", "median"),
-  store.number = "ncells")                   # store number of cells 
+library(ggplot2)
 ```
 
 ```{r}
-rm(sce)
+set.seed(123) # for reproducibility
+options(timeout = 1e6) # to download large data files
+
+# Load helper functions
+here::i_am("chapters/1_dup_zma_cleaning.Rmd")
+source(here("products", "code", "utils.R"))
+
+# Plot background
+bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
+```
+
+## 1.2 Load duplication data
+```{r}
+# Load duplicate pairs and genes
+dup_list <- readRDS(
+    here("products", "results", "dup_list.rds")
+)
+
+# Define color palette for duplication modes
+dup_pal <- c(
+    SD = "#000000",  
+    TD = "#E69F00",
+    PD = "#56B4E9",
+    rTRD = "#009E73",
+    dTRD = "#F0E442",
+    DD = "#0072B2"
+)
+```
+
+Overview of the duo_list data
+```{r}
+head(dup_list[["zma"]]$pairs, 5)
+head(dup_list[["zma"]]$genes, 5)
+```
+
+```{r}
+names(dup_list[["zma"]])
+
+names(dup_list[["zma"]]$pairs)
+names(dup_list[["zma"]]$genes)
 ```
 
 
+## 1.3 Load Zeo Maize data
+```{r}
+# Load `SpatialExperiment` objects
+zma_spe <- readRDS(here("products", "results", "corrected_RedDim.rds"))
+```
 
-QUESTIONS:
-??? not sure whether to summarize across Celltype_Tissue, _Dataset or _Organ ??? (line 23-40)
-? still need counts, or only work with logcounts
+## 1.4 Check gene ID compatibility
+```{r}
+# V4 zma_spe
+# Extract the numbers at the end
+user_genes <- rownames(zma_spe)
+# Extract the ID that starts with Zm00
+user_genes <- user_genes[grep("Zm00", user_genes)]
+# Remove Zm00001d pattern and get the second part
+user_nums <- gsub("Zm00001d", "", user_genes)
 
+# V5 dup_list
+# Extract the numbers at the end
+list_genes <- dup_list[["zma"]]$genes$gene
+# Remove Zm00001eb pattern and get the second part
+list_nums <- gsub("Zm00001eb", "", list_genes)
 
+# Check the intersects between dup_list and zma_spe
+common_nums <- intersect(user_nums, list_nums)
 
+cat("zma_spe(v4) number:", length(user_nums), "\n")
+cat("dup_list(v5) number:", length(list_nums), "\n")
+cat("overlap:", length(common_nums), "\n")
+```
 
+Extract Gene ID from zme_spe
+```{}
+output_dir <- "/kyukon/data/gent/courses/2025/design_project_C003698/groups/group01/products/tables/"
+txt_filename <- "zma_gene_ids.txt"
+txt_full_path <- file.path(output_dir, txt_filename)
 
+# Extract Gene ID
+gene_ids <- rownames(zma_spe)
 
+# Save as .txt file
+write.table(gene_ids, file = txt_full_path, 
+            quote = FALSE, 
+            row.names = FALSE, 
+            col.names = FALSE)
+```
 
+Open and adjust the converted file
+```{r}
+# Clean IDs in the mapping table (Remove version suffixes like '.1')
+zma_id_raw <- read.csv(here("products", "tables", "zma_ID_converter.txt"), 
+                     check.names = FALSE, 
+                     stringsAsFactors = FALSE)
 
+id_cleaned <- zma_id_raw %>%
+  select(`Old stable ID`, `New stable ID`) %>%
+  filter(grepl("^\\s*Zm", `Old stable ID`)) %>%
+  mutate(
+    Old_Cleaned = sub("\\..*", "", `Old stable ID`),
+    New_Cleaned = sub("\\..*", "", `New stable ID`)
+  )
 
+head(id_cleaned[, c("Old stable ID", "Old_Cleaned")])
+```
 
+```{r}
+# Extract IDs from your data objects (ensure these are loaded)
+spe_ids <- rownames(zma_spe)
+dup_ids <- dup_list[["zma"]]$genes$gene
 
+spe_ids_clean <- sub("\\..*", "", spe_ids)
+
+# Check existence using the CLEANED IDs
+final_match <- id_cleaned %>%
+  mutate(
+    # Delete empty space 
+    Old_Cleaned = trimws(Old_Cleaned),
+    New_Cleaned = trimws(New_Cleaned),
+    
+    match_spe = Old_Cleaned %in% spe_ids_clean,
+    match_dup = New_Cleaned %in% dup_ids,
+    valid = match_spe & match_dup
+  )
+
+# Count valid matches
+cat("\nNumber of valid (mappable) genes:", sum(final_match$valid), "\n")
+
+# Save final_match object as RDS
+output_path <- here("products", "results", "final_match.rds")
+saveRDS(final_match, file = output_path)
+```
+
+```{r}
+# Load the saved final_match data
+final_match <- readRDS(here("products", "results", "final_match.rds"))
+
+# Check the loaded data
+head(final_match)
+
+valid_matches <- final_match %>% 
+  filter(valid == TRUE)
+
+valid_spe_ids <- valid_matches$Old_Cleaned
+
+zma_spe_valid <- zma_spe[valid_spe_ids, ]
+rownames(zma_spe_valid) <- valid_matches$New_Cleaned
+
+nrow(valid_matches)
+```
+
+```{r}
+# Create zma_spe_valid
+valid_spe_ids <- valid_matches$Old_Cleaned
+zma_spe_valid <- zma_spe[valid_spe_ids, ]
+rownames(zma_spe_valid) <- valid_matches$New_Cleaned
+
+# Create dup_list_valid
+dup_list_valid <- dup_list
+valid_dup_ids <- valid_matches$New_Cleaned
+
+# Filter the genes data frame
+dup_list_valid[["zma"]]$genes <- dup_list[["zma"]]$genes %>%
+  filter(trimws(gene) %in% valid_dup_ids)
+
+# Filter the pairs data frame
+dup_list_valid[["zma"]]$pairs <- dup_list[["zma"]]$pairs %>%
+  filter(trimws(dup1) %in% valid_dup_ids & trimws(dup2) %in% valid_dup_ids)
+```
+
+```{r}
+head(rownames(zma_spe_valid))
+```
+
+```{r}
+# Save data
+saveRDS(zma_spe_valid, file = here("products", "results", "zma_spe_valid.rds"))
+saveRDS(dup_list_valid, file = here("products", "results", "dup_list_valid.rds"))
+```
+
+```{}
+zma_spe_valid <- readRDS(here("products", "results", "zma_spe_valid.rds"))
+dup_list_valid <- readRDS(here("products", "results", "dup_list_valid.rds"))
+```
+
+```{r}
+# Verification
+cat("Original zma_spe genes:", nrow(zma_spe), "\n")
+cat("Valid zma_spe genes:   ", nrow(zma_spe_valid), "\n\n")
+
+cat("Original dup_list pairs:", nrow(dup_list[["zma"]]$pairs), "\n")
+cat("Valid dup_list pairs:   ", nrow(dup_list_valid[["zma"]]$pairs), "\n")
+```
+
+Boxplots showing the distribution of Ka/Ks ratios across different gene duplication types
+```{r}
+output_dir <- "/kyukon/data/gent/courses/2025/design_project_C003698/groups/group01/products/plots/"
+file_name <- "Ka_Ks_boxplot_valid.png"
+full_path <- file.path(output_dir, file_name)
+
+df_pairs <- dup_list_valid[["zma"]]$pairs
+
+my_colors <- c("DD" = "#9ecae1",
+               "SD" = "#a1d99b",
+               "dTRD" = "#fdbb84",
+               "PD" = "#bcbddc",
+               "rTRD" = "#d77fb3",
+               "TD" = "#9e9ac8")
+
+median_data <- df_pairs %>%
+  group_by(type) %>%
+  summarise(median_val = median(Ka_Ks, na.rm = TRUE)) %>%
+  mutate(median_txt = sprintf("%.4f", median_val))
+
+p <- ggplot(df_pairs, aes(x = type, y = Ka_Ks, fill = type)) +
+  geom_boxplot(width = 0.6, outlier.alpha = 0.3) +
+  
+  scale_fill_manual(values = my_colors) +
+  
+  scale_y_continuous(breaks = seq(0, 6, by = 1)) +
+  coord_cartesian(ylim = c(0, 6)) +
+
+  theme_classic() +
+  
+  labs(title = "Ka/Ks Distribution by Type",
+       x = "Duplication Type",
+       y = "Ka/Ks Ratio") +
+  
+  theme(
+      legend.position = "none",
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+      
+      axis.title.x = element_text(size = 14, face = "bold", margin = margin(t = 10)),
+      axis.title.y = element_text(size = 14, face = "bold", margin = margin(r = 10)),
+      
+      axis.text = element_text(color = "black", size = 12)
+    )
+
+ggsave(filename = full_path, plot = p, width = 8, height = 6, dpi = 300)
+```
 
 
