@@ -1,5 +1,5 @@
 ---
-title: "1_dup_zma_cleaning"
+title: "chapter2"
 author: "Woowon Jang"
 date: "`r Sys.Date()`"
 output: html_document
@@ -19,6 +19,7 @@ library(tibble)
 library(Matrix)
 library(stringr)
 library(ggplot2)
+library(SingleCellExperiment)
 
 set.seed(123) # for reproducibility
 options(timeout = 1e6) # to download large data files
@@ -573,24 +574,47 @@ get_svg <- function(spe, spatial_cluster = "Celltype") {
   return(res_df)
 }
 
-res <- DESpace_test(
+colData(zma_spe_valid)$Celltype   <- factor(colData(zma_spe_valid)$Celltype)
+colData(zma_spe_valid)$Orig.ident <- factor(colData(zma_spe_valid)$Orig.ident)
+colData(zma_spe_valid)$Condition  <- factor(colData(zma_spe_valid)$Condition)
+
+res <- dsp_test(
   spe = zma_spe_valid,
-  spatial_cluster = "Celltype",
-  replicates = FALSE,
+  cluster_col = "Celltype",
+  sample_col = "Orig.ident",
+  condition_col = "Condition",
+  test = "QLF",
   min_counts = 1,
-  min_non_zero_spots = 5
+  min_non_zero_spots = 5,
+  verbose = TRUE
 )
 ```
 
 ```{r}
+# Get svgs
+get_svg <- function(spe, spatial_cluster = "Celltype", fdr_cutoff = 0.05) {
+
+  res <- DESpace::svg_test(
+    spe = spe,
+    cluster_col = spatial_cluster,
+    min_counts = 1,
+    min_non_zero_spots = 5
+  )
+
+  res_df <- res$gene_results |>
+    as.data.frame() |>
+    tibble::rownames_to_column("gene_id") |>
+    dplyr::filter(!is.na(FDR), FDR <= fdr_cutoff)
+
+  res_df
+}
+
 # Identify SVGs
-zma_svgs_list <- list(
-  sample1 = get_svg(zma_spe_valid, spatial_cluster = "Celltype")
+svgs <- list(
+  zma = get_svg(zma_spe_valid, spatial_cluster = "Celltype")
 )
 
-svgs <- list(
-  zma = zma_svgs_list
-)
+
 ```
 
 ```{r}
