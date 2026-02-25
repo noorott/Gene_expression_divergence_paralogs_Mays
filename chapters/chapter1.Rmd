@@ -1131,7 +1131,21 @@ As the quality of batch correction was not satisfactory, we will work further wi
 sce <- readRDS("uncorrected_sce_RedDim.rds")
 ```
 
-First we will make a new colData variable indicating the cell type and organ combination for each cell. This is the variable across we will summarize our counts. 
+For later analysis, different cellphases will be grouped into 1 celltype
+```{r}
+# cell types annotated as being a certain cell phase will be grouped together
+# original celltype is kept in Celltype_original
+
+colData(sce)$Celltype_original <- colData(sce)$Celltype
+sce$Celltype[sce$Celltype %in% c("S phase", "G2/M phase")] <- "Cell phase"
+```
+
+We don't need reduced dimensions for further analysis
+```{r}
+reducedDim(sce) <- NULL
+```
+
+Next we make a new colData variable indicating the cell type and organ combination for each cell. This is the variable across we will summarize our counts. 
 ```{r}
 # string manipulation to make resulting variable more readable
 # eg "RootCap_RootShoot" in stead of "Root cap_Root Shoot"
@@ -1144,9 +1158,6 @@ organs <- sce$Organ %>%
   str_to_title() %>%
   str_remove_all(" ")
 
-# cell types annotated as being a certain cell phase will be grouped together
-# with the Stem cell niche cell type
-celltypes[celltypes %in% c("SPhase", "G2/MPhase")] <- "StemCellNiche"
 
 # create new colData variable
 sce$Celltype_Organ <- paste(celltypes, organs, sep="_")
@@ -1165,6 +1176,9 @@ summarized_sce <- aggregateAcrossCells(
 ```
 
 Save as RDS
+```{r}
+saveRDS(sce, "uncorrected_sce.rds")
+```
 ```{r}
 saveRDS(summarized_sce, file = "summarized_sce.rds")
 ```
