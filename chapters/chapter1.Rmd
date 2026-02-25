@@ -32,6 +32,12 @@ library(flextable)
 library(stringr)
 ```
 
+```{r}
+# Make shore we can render plots on hpc
+options(bitmapType = "cairo")
+```
+
+
 ##################
 ## Read in Data ##
 ##################

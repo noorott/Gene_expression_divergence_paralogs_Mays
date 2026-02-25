@@ -1,5 +1,5 @@
 ---
-title: "chapter2"
+title: "Chapter 2: Acquiring Duplication Data"
 author: "Woowon Jang"
 date: "`r Sys.Date()`"
 output: html_document
@@ -7,6 +7,7 @@ output: html_document
 
 # 1 Environment settings
 ## 1.1 Load packages
+
 ```{r}
 library(here)
 library(tidyverse)
@@ -21,6 +22,8 @@ library(stringr)
 library(ggplot2)
 library(SingleCellExperiment)
 
+Eli: what is this?
+```{r}
 set.seed(123) # for reproducibility
 options(timeout = 1e6) # to download large data files
 
@@ -33,66 +36,87 @@ bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
 ```
 
 ## 1.2 Load duplication data
+
+Duplication information on paralog pairs obtained from previous publication (Almeida-Silva & Van de Peer, 2025)
 ```{r}
 # Load duplicate pairs and genes
-dup_list <- readRDS(
-    here("products", "results", "dup_list.rds")
-)
-
-# Define color palette for duplication modes
-dup_pal <- c(
-    SD = "#000000",  
-    TD = "#E69F00",
-    PD = "#56B4E9",
-    rTRD = "#009E73",
-    dTRD = "#F0E442",
-    DD = "#0072B2"
-)
+dup_list <- readRDS( "../Duplication_data/dup_list.rds")
 ```
-
-Overview of the duo_list data
-```{r}
-head(dup_list[["zma"]]$pairs, 5)
-head(dup_list[["zma"]]$genes, 5)
-```
+This file contains information on paralogs for different species. However, we only need the info for Zea mays
 
 ```{r}
-names(dup_list[["zma"]])
-
-names(dup_list[["zma"]]$pairs)
-names(dup_list[["zma"]]$genes)
+dup_list <- dup_list$zma
 ```
+
+
+Overview of the dup_list data
+```{r}
+names(dup_list)
+
+names(dup_list$pairs)
+names(dup_list$genes)
+```
+```{r}
+head(dup_list$pairs, 5)
+head(dup_list$genes, 5)
+```
+dup_list contains information on paralog pairs: their age (Ka_Ks) and the duplication mode.
+
 
 ## 1.3 Load Zeo Maize data
+
+Load in the single cell sequencing data obtained from chapter 1 
 ```{r}
-# Load `SpatialExperiment` objects
-zma_spe <- readRDS(here("products", "results", "corrected_RedDim.rds"))
+summarized_sce <- readRDS("summarized_sce.rds")
 ```
 
 ## 1.4 Check gene ID compatibility
+
+Extract gene IDs used in the single cell experiment
 ```{r}
-# V4 zma_spe
-# Extract the numbers at the end
-user_genes <- rownames(zma_spe)
-# Extract the ID that starts with Zm00
-user_genes <- user_genes[grep("Zm00", user_genes)]
+sceIDs <- rownames(summarized_sce)
+```
+It contains a mixed annotation set with different ID types:
+- Zm00001dxxxxx: these are standard nuclear protein-coding genes, the d
+- ENSRNAxxxxxxxxx: RNA gene IDs, often non coding RNAs, but also predicted transcripts
+- ZeamMpxxx: mitochondrial protein genes
+- ZeamMtxxx: mitochondrial tRNA genes
+- ZemaCpxxx: chloroplast genes
+- ZemaCtxxx: chloroplast tRNA or other plastid non-coding genes
+
+The d in Zm00001dxxxxx means that the IDs are in genome version V4
+
+We are interested in the standard nuclear protein-coding genes, so we extract those IDs starting with Zm00.
+Eli: are mito proteins not relevant as well?
+```{r}
+sceIDs <- sceIDs[grep("Zm00", sceIDs)]
+```
+
+```{r}
 # Remove Zm00001d pattern and get the second part
-user_nums <- gsub("Zm00001d", "", user_genes)
+sce_nums <- gsub("Zm00001d", "", sceIDs)
+```
 
-# V5 dup_list
-# Extract the numbers at the end
-list_genes <- dup_list[["zma"]]$genes$gene
+Next we extract the gene IDs from the duplication data to check compatibility
+```{r}
+dupIDs <- dup_list$genes$gene
+```
+Here, all gene IDs are in the Zm00001ebxxxxx format; they are nuclear gene IDs from version 5. Gene IDs are thus not compatible
+
+eli: is this to show that we need to convert IDs to the same version?
+```{r}
 # Remove Zm00001eb pattern and get the second part
-list_nums <- gsub("Zm00001eb", "", list_genes)
+dup_nums <- gsub("Zm00001eb", "", dupIDs)
 
-# Check the intersects between dup_list and zma_spe
-common_nums <- intersect(user_nums, list_nums)
+# Check the intersects between dup_list and sce IDs
+common_nums <- intersect(sceIDs, dup_nums)
 
-cat("zma_spe(v4) number:", length(user_nums), "\n")
-cat("dup_list(v5) number:", length(list_nums), "\n")
+cat("zma_spe(v4) number:", length(sceIDs), "\n")
+cat("dup_list(v5) number:", length(dup_nums), "\n")
 cat("overlap:", length(common_nums), "\n")
 ```
 
+eli: do we need this file?
 Extract Gene ID from zme_spe
 ```{}
 output_dir <- here("products", "tables")
@@ -109,15 +133,19 @@ write.table(gene_ids, file = txt_full_path,
             col.names = FALSE)
 ```
 
-Open and adjust the converted file
-e.g. Zm00001d001763.1 -> Zm00001d001763
+
+Gene ID version conversion table from ...?
+
+Open and clean the conversion file 
+- remove unneeded duplicate rows
+- remove version number: e.g. Zm00001d001763.1 -> Zm00001d001763
 ```{r}
-# Clean IDs in the mapping table (Remove version suffixes like '.1')
-zma_id_raw <- read.csv(here("products", "tables", "zma_ID_converter.txt"), 
+id_conversionTable <- read.csv("../Duplication_data/zma_ID_converter.txt", 
                      check.names = FALSE, 
                      stringsAsFactors = FALSE)
 
-id_cleaned <- zma_id_raw %>%
+# Clean IDs in the mapping table (Remove version suffixes like '.1' and duplicate rows)
+id_conversionTable <- id_conversionTable %>%
   select(`Old stable ID`, `New stable ID`) %>%
   filter(grepl("^\\s*Zm", `Old stable ID`)) %>%
   mutate(
@@ -125,53 +153,93 @@ id_cleaned <- zma_id_raw %>%
     New_Cleaned = sub("\\..*", "", `New stable ID`)
   )
 
-head(id_cleaned[, c("Old stable ID", "Old_Cleaned")])
+head(id_conversionTable[, c("Old stable ID", "Old_Cleaned")])
 ```
 
 ```{r}
-# Extract IDs from your data objects (ensure these are loaded)
-spe_ids <- rownames(zma_spe)
-dup_ids <- dup_list[["zma"]]$genes$gene
-
-spe_ids_clean <- sub("\\..*", "", spe_ids)
-
 # Check existence using the CLEANED IDs
-final_match <- id_cleaned %>%
+final_IDmatch <- id_conversionTable %>%
   mutate(
-    # Delete empty space 
+    # Delete leading and trailing white space
     Old_Cleaned = trimws(Old_Cleaned),
     New_Cleaned = trimws(New_Cleaned),
     
-    match_spe = Old_Cleaned %in% spe_ids_clean,
-    match_dup = New_Cleaned %in% dup_ids,
-    valid = match_spe & match_dup
+    match_sce = Old_Cleaned %in% sceIDs,
+    match_dup = New_Cleaned %in% dupIDs,
+    valid = match_sce & match_dup
   )
-
-# Count valid matches
-cat("\nNumber of valid (mappable) genes:", sum(final_match$valid), "\n")
-
-# Save final_match object as RDS
-output_path <- here("products", "results", "final_match.rds")
-saveRDS(final_match, file = output_path)
 ```
 
 ```{r}
-# Load the saved final_match data
-final_match <- readRDS(here("products", "results", "final_match.rds"))
+head(final_IDmatch)
+```
+```{r}
+# Count valid matches
+cat("\nNumber of valid (mappable) genes:", sum(final_IDmatch$valid), "\n")
 
-# Check the loaded data
-head(final_match)
+# Count number of sce matches
+cat("\nNumber of matching sce IDs:", 
+    sum(final_IDmatch$match_sce), "of", nrow(final_IDmatch), "\n")
 
-valid_matches <- final_match %>% 
+# Count number of dup matches
+cat("\nNumber of matching dup IDs:", 
+    sum(final_IDmatch$match_dup), "of", nrow(final_IDmatch), "\n")
+# Count number of sce matches
+cat("\nNumber of failed (non-mappable) genes:", 
+    sum(final_IDmatch$match_sce != final_IDmatch$match_dup), "\n")
+```
+Of the 32927 gene IDs present in the ID conversion table, all are present in the sce object. However, 3458 are not present in the dup list
+Eli: probably just genes which are not a duplicate so no problem?
+
+```{r}
+# Save final_match object as RDS
+file_path <- "../Duplication_data/final_IDmatch.rds"
+
+if (file.exists(file_path)) {
+  final_IDmatch <- readRDS(file_path)
+  message("Loaded existing final_IDmatch.rds")
+} else {
+  saveRDS(final_IDmatch, file_path)
+  message("Saved new final_IDmatch.rds")
+}
+```
+
+```{r}
+# save the rows with gene IDs that are both in the dup ID list and the sce ID list
+valid_matches <- final_IDmatch %>% 
   filter(valid == TRUE)
 
-valid_spe_ids <- valid_matches$Old_Cleaned
 
-zma_spe_valid <- zma_spe[valid_spe_ids, ]
-rownames(zma_spe_valid) <- valid_matches$New_Cleaned
+cat("Number of nuclear coding genes:", length(sceIDs))
+cat("\nNumber that can be matches to the duplicate list:", nrow(valid_matches), "\n")
+cat("\nDifference:", length(sceIDs) - nrow(valid_matches))
 
-nrow(valid_matches)
 ```
+These are genes that are either not a part of a paralog pair, or couldn't be converted with the ID conversion table
+Eli: problem?
+
+Next we will create a new sce object with the summarized expression data, only for the genes which can be linked to the duplicate table. V3 IDs will also be converted to V4
+
+```{r}
+# get sce ID list with only IDs which can be linked to the dup list
+sce_paralog_ids <- valid_matches$Old_Cleaned
+
+# create sce objects with only these genes
+summarized_sce_paralogs <- summarized_sce[sce_paralog_ids, ]
+```
+
+Confirm that order is the same
+```{r}
+all(rownames(summarized_sce_paralogs) == valid_matches$Old_Cleaned)
+```
+
+Convert IDs to V4
+```{r}
+rownames(summarized_sce_paralogs) <- valid_matches$New_Cleaned
+```
+
+
+
 
 ```{r}
 # Create zma_spe_valid
@@ -282,6 +350,20 @@ assay(zma_spe_valid, "logcounts")[1:5, 1:5]
 ```
 
 # 2.2 Expression levels of duplicated genes
+
+```{r}
+# Define color palette for duplication modes
+dup_pal <- c(
+    SD = "#000000",  
+    TD = "#E69F00",
+    PD = "#56B4E9",
+    rTRD = "#009E73",
+    dTRD = "#F0E442",
+    DD = "#0072B2"
+)
+```
+
+
 ```{r}
 dup_genes <- dup_list_valid[["zma"]]$genes
 # dup_genes: 28902 x 2 (gene, type)
@@ -651,3 +733,9 @@ ora_svg_dup_zma <- lapply(
 
 head(ora_svg_dup_zma)
 ```
+
+
+REFERENCES
+Fabricio Almeida-Silva, Yves Van de Peer, Gene expression divergence following gene and genome duplications in spatially resolved plant transcriptomes, The Plant Cell, Volume 37, Issue 10, October 2025, koaf243, https://doi.org/10.1093/plcell/koaf243
+
+
