@@ -90,10 +90,9 @@ The d in Zm00001dxxxxx means that the IDs are in genome version V4
 We are interested in the standard nuclear protein-coding genes, so we extract those IDs starting with Zm00.
 Eli: are mito proteins not relevant as well?
 ```{r}
-sceIDs <- user_genes[grep("Zm00", sceIDs)]
+sceIDs <- sceIDs[grep("Zm00", sceIDs)]
 ```
 
-eli: ?
 ```{r}
 # Remove Zm00001d pattern and get the second part
 sce_nums <- gsub("Zm00001d", "", sceIDs)
@@ -171,9 +170,6 @@ final_IDmatch <- id_conversionTable %>%
     valid = match_sce & match_dup
   )
 ```
-eli: should it not be 
-    match_sce = sceIDs %in% Old_Cleaned ,
-    match_dup = dupIDs %in% New_Cleaned,
 
 ```{r}
 head(final_IDmatch)
@@ -193,6 +189,8 @@ cat("\nNumber of matching dup IDs:",
 cat("\nNumber of failed (non-mappable) genes:", 
     sum(final_IDmatch$match_sce != final_IDmatch$match_dup), "\n")
 ```
+Of the 32927 gene IDs present in the ID conversion table, all are present in the sce object. However, 3458 are not present in the dup list
+Eli: probably just genes which are not a duplicate so no problem?
 
 ```{r}
 # Save final_match object as RDS
@@ -212,14 +210,37 @@ if (file.exists(file_path)) {
 valid_matches <- final_IDmatch %>% 
   filter(valid == TRUE)
 
-# get sce ID list with only IDs which can be linked to the dup list
-paralog_sce_ids <- valid_matches$Old_Cleaned
 
-sce_paralogs <- zma_spe[valid_spe_ids, ]
-rownames(zma_spe_valid) <- valid_matches$New_Cleaned
+cat("Number of nuclear coding genes:", length(sceIDs))
+cat("\nNumber that can be matches to the duplicate list:", nrow(valid_matches), "\n")
+cat("\nDifference:", length(sceIDs) - nrow(valid_matches))
 
-nrow(valid_matches)
 ```
+These are genes that are either not a part of a paralog pair, or couldn't be converted with the ID conversion table
+Eli: problem?
+
+Next we will create a new sce object with the summarized expression data, only for the genes which can be linked to the duplicate table. V3 IDs will also be converted to V4
+
+```{r}
+# get sce ID list with only IDs which can be linked to the dup list
+sce_paralog_ids <- valid_matches$Old_Cleaned
+
+# create sce objects with only these genes
+summarized_sce_paralogs <- summarized_sce[sce_paralog_ids, ]
+```
+
+Confirm that order is the same
+```{r}
+all(rownames(summarized_sce_paralogs) == valid_matches$Old_Cleaned)
+```
+
+Convert IDs to V4
+```{r}
+rownames(summarized_sce_paralogs) <- valid_matches$New_Cleaned
+```
+
+
+
 
 ```{r}
 # Create zma_spe_valid
