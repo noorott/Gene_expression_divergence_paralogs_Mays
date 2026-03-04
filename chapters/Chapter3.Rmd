@@ -1,0 +1,467 @@
+---
+title: 'Chapter 3:'
+author: "Woowon Jang"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+set.seed(123) # for reproducibility
+options(timeout = 1e6) # to download large data files
+
+# Load helper functions
+here::i_am("chapters/chapter2.Rmd")
+source(here("products", "code", "utils.R"))
+
+# Plot background
+bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
+```
+
+# 2 Gene level analysis
+## 2.1 Load packages
+```{r}
+library(rcompanion)
+library(scuttle)
+```
+
+Boxplots showing the distribution of Ka/Ks ratios across different gene duplication types
+```{r}
+output_dir <- here("products", "plots")
+file_name <- "Ka_Ks_boxplot_valid.png"
+full_path <- file.path(output_dir, file_name)
+
+df_pairs <- dup_list_valid[["zma"]]$pairs
+
+my_colors <- c("DD" = "#9ecae1",
+               "SD" = "#a1d99b",
+               "dTRD" = "#fdbb84",
+               "PD" = "#bcbddc",
+               "rTRD" = "#d77fb3",
+               "TD" = "#9e9ac8")
+
+median_data <- df_pairs %>%
+  group_by(type) %>%
+  summarise(median_val = median(Ka_Ks, na.rm = TRUE)) %>%
+  mutate(median_txt = sprintf("%.4f", median_val))
+
+p <- ggplot(df_pairs, aes(x = type, y = Ka_Ks, fill = type)) +
+  geom_boxplot(width = 0.6, outlier.alpha = 0.3) +
+  
+  scale_fill_manual(values = my_colors) +
+  
+  scale_y_continuous(breaks = seq(0, 6, by = 1)) +
+  coord_cartesian(ylim = c(0, 6)) +
+
+  theme_classic() +
+  
+  labs(title = "Ka/Ks Distribution by Type",
+       x = "Duplication Type",
+       y = "Ka/Ks Ratio") +
+  
+  theme(
+      legend.position = "none",
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+      
+      axis.title.x = element_text(size = 14, face = "bold", margin = margin(t = 10)),
+      axis.title.y = element_text(size = 14, face = "bold", margin = margin(r = 10)),
+      
+      axis.text = element_text(color = "black", size = 12)
+    )
+
+ggsave(filename = full_path, plot = p, width = 8, height = 6, dpi = 300)
+```
+
+```{r}
+# Check assay names in the valid SpatialExperiment object
+assayNames(zma_spe_valid)
+```
+
+```{r}
+# Check the reconstructed assay
+assay(zma_spe_valid, "logcounts")[1:5, 1:5]
+```
+
+# 2.2 Expression levels of duplicated genes
+
+```{r}
+# Define color palette for duplication modes
+dup_pal <- c(
+    SD = "#000000",  
+    TD = "#E69F00",
+    PD = "#56B4E9",
+    rTRD = "#009E73",
+    dTRD = "#F0E442",
+    DD = "#0072B2"
+)
+```
+
+
+```{r}
+dup_genes <- dup_list_valid[["zma"]]$genes
+# dup_genes: 28902 x 2 (gene, type)
+
+# sum
+expr_sum <- rowSums(logcounts(zma_spe_valid), na.rm = TRUE)
+
+expr_sum_df <- tibble::tibble(
+  gene = names(expr_sum),
+  exp  = as.numeric(expr_sum)
+)
+
+sum_df <- expr_sum_df |>
+  dplyr::inner_join(dup_genes, by = "gene") |>
+  dplyr::mutate(
+    species   = "zma",
+    statistic = "sum",
+    type      = factor(type, levels = names(dup_pal))
+  )
+
+nrow(sum_df)
+head(sum_df)
+
+# mean
+expr_mean <- rowMeans(logcounts(zma_spe_valid), na.rm = TRUE)
+
+expr_mean_df <- tibble::tibble(
+  gene = names(expr_mean),
+  exp  = as.numeric(expr_mean)
+)
+
+mean_df <- expr_mean_df |>
+  dplyr::inner_join(dup_genes, by = "gene") |>
+  dplyr::mutate(
+    species   = "zma",
+    statistic = "mean",
+    type      = factor(type, levels = names(dup_pal))
+  )
+
+nrow(mean_df)
+head(mean_df)
+```
+```{r}
+# Combine all `SpatialExperiment` objects in a single list
+sum_combined <- sum_df |>
+  dplyr::mutate(
+    csum    = exp,
+    species = "Zma"
+  ) |>
+  dplyr::select(gene, type, species, csum) |>
+  dplyr::distinct(gene, .keep_all = TRUE)
+
+# Get mean of gene expression levels across all samples
+mean_combined <- mean_df |>
+  dplyr::mutate(
+    cmean   = exp,
+    species = "Zma"
+  ) |>
+  dplyr::select(gene, type, species, cmean) |>
+  dplyr::distinct(gene, .keep_all = TRUE)
+```
+
+```{r}
+# Compare distros and get CLDs
+## Sum
+sum_clds <- cld_kw_dunn(
+  sum_combined,
+  var   = "type",
+  value = "csum"
+) |>
+  dplyr::mutate(
+    species = factor("Zma", levels = c("Zma")),
+    x       = max(sum_combined$csum, na.rm = TRUE) * 0.9
+  ) |>
+  dplyr::rename(type = Group)
+
+#### Mean
+mean_clds <- cld_kw_dunn(
+  mean_combined,
+  var   = "type",
+  value = "cmean"
+) |>
+  dplyr::mutate(
+    species = factor("Zma", levels = c("Zma")),
+    x       = max(mean_combined$cmean, na.rm = TRUE) * 0.9
+  ) |>
+  dplyr::rename(type = Group)
+```
+
+```{r}
+p_sum_combined <- ggplot(sum_combined, aes(x = csum, y = type)) +
+  geom_violin(aes(fill = type), show.legend = FALSE) +
+  scale_fill_manual(values = dup_pal) +
+  geom_boxplot(width = 0.1, outlier.color = "gray60", outlier.alpha = 0.5) +
+  geom_label(
+    data = sum_clds,
+    aes(x = x, y = type, label = Letter)
+  ) +
+  facet_wrap(~ species, nrow = 1, scales = "free_x") +
+  ggh4x::facetted_pos_scales(x = list(
+    scale_x_continuous(
+      limits = c(0, max(sum_combined$csum, na.rm = TRUE) * 1.05),
+      labels = scales::unit_format(unit = "K", scale = 1e-3)
+    )
+  )) +
+  labs(
+    x = "Sum of log-transformed normalized counts", y = NULL,
+    title = "Total expression levels and gene duplication mode (Zma)",
+    subtitle = "CLD from Kruskal-Wallis + post-hoc Dunn's test; P < 0.05"
+  ) +
+  theme_classic() +
+  theme(panel.background = element_rect(fill = bg))
+
+p_mean_combined <- ggplot(mean_combined, aes(x = cmean, y = type)) +
+  geom_violin(aes(fill = type), show.legend = FALSE) +
+  scale_fill_manual(values = dup_pal) +
+  geom_boxplot(width = 0.1, outlier.color = "gray60", outlier.alpha = 0.5) +
+  geom_label(
+    data = mean_clds, 
+    aes(x = x, y = type, label = Letter)
+  ) +
+  facet_wrap(~ species, nrow = 1, scales = "free_x") +
+  ggh4x::facetted_pos_scales(x = list(
+    scale_x_continuous(
+      limits = c(0, max(mean_combined$cmean, na.rm = TRUE) * 1.05)
+    )
+  )) +
+  labs(
+    x = "Mean of log-transformed normalized counts", y = NULL,
+    title = "Mean expression level and gene duplication mode (Zma)",
+    subtitle = "CLD from Kruskal-Wallis + post-hoc Dunn's test; P < 0.05"
+  ) +
+  theme_classic() +
+  theme(panel.background = element_rect(fill = bg))
+
+```
+
+```{r}
+output_dir <- here("products", "plots")
+
+ggsave(
+  file.path(output_dir, "Zma_sum_combined.png"),
+  plot   = p_sum_combined,
+  width  = 10,
+  height = 6,
+  dpi    = 300
+)
+
+ggsave(
+  file.path(output_dir, "Zma_mean_combined.png"),
+  plot   = p_mean_combined,
+  width  = 10,
+  height = 6,
+  dpi    = 300
+)
+```
+# 3.2 Expression breadths of duplicated genes
+```{r}
+#' Calculate the proportion of non-zero spots for each gene by cell type
+#'
+#' @param spe A SingleCellExperiment or SpatialExperiment object.
+#' @param cell_type Character, name of the column with cell type information.
+#'
+#' @return A data frame with variables `gene`, `cell_type`, and `prop_detected`.
+get_prop_detected <- function(spe,
+                              cell_type  = "Celltype",
+                                assay_name = "logcounts"
+                                ) {
+  
+  mat <- SummarizedExperiment::assay(spe, assay_name)
+  
+  ct <- as.character(SummarizedExperiment::colData(spe)[[cell_type]])
+  if (is.null(ct)) {
+    stop("Column '", cell_type, "' not found in colData(spe).")
+  }
+  
+  res_list <- lapply(unique(ct), function(cti) {
+    idx  <- which(ct == cti)
+    prop <- rowMeans(mat[, idx, drop = FALSE] != 0)
+    
+    tibble::tibble(
+      gene          = rownames(mat),
+      cell_type     = cti,
+      prop_detected = as.numeric(prop)
+    )
+  })
+  
+  dplyr::bind_rows(res_list)
+}
+
+prop_detected_zma <- get_prop_detected(
+  spe       = zma_spe_valid,
+  cell_type = "Celltype"   # colData(zma_spe_valid)$Celltype
+)
+
+head(prop_detected_zma)
+
+output_dir <- here("products", "results")
+saveRDS(prop_detected_zma, file = file.path(output_dir, "prop_detected_zma.rds"))
+```
+
+```{r}
+# Calculate absolute expression breadth
+eb_zma <- prop_detected_zma |>
+  dplyr::group_by(gene, cell_type) |>
+  dplyr::mutate(mean_prop = mean(prop_detected, na.rm = TRUE)) |>
+  dplyr::ungroup() |>
+  dplyr::filter(mean_prop >= 0.01) |>
+  dplyr::distinct(gene, cell_type, .keep_all = TRUE) |>
+  dplyr::count(gene, name = "breadth") |> 
+  dplyr::inner_join(dup_list_valid[["zma"]]$genes, by = "gene") |>
+  dplyr::mutate(
+    species = "Zma",
+    type    = factor(type, levels = names(dup_pal))
+  )
+
+head(eb_zma)
+```
+
+```{r}
+# Test for differences in expression breadth by duplication mode
+eb_test <- cld_kw_dunn(
+  eb_zma,
+  var   = "type",
+  value = "breadth"
+) |>
+  dplyr::mutate(
+    species = factor("Zma", levels = "Zma"),
+    x = max(eb_zma$breadth, na.rm = TRUE) * 0.9
+  ) |>
+  dplyr::rename(type = Group)
+```
+
+```{r}
+# Plot distributions of absolute expression breadths
+p_eb_zma <- ggplot(eb_zma, aes(x = breadth, y = type)) +
+  geom_violin(aes(fill = type), show.legend = FALSE) +
+  scale_fill_manual(values = dup_pal) +
+  geom_boxplot(width = 0.1, outlier.color = "gray60", outlier.alpha = 0.5) +
+  geom_label(
+    data = eb_test,
+    aes(x = x, y = type, label = Letter)
+  ) +
+  labs(
+    x = "Expression breadth (number of cell types)",
+    y = NULL,
+    title = "Expression breadth and gene duplication mode (Zma)",
+    subtitle = "CLD from Kruskal-Wallis + post-hoc Dunn's test; P < 0.05"
+  ) +
+  theme_classic() +
+  theme(panel.background = element_rect(fill = bg))
+
+ggsave(
+  file.path(here("products", "plots"), "Zma_expression_breadth.png"),
+  plot   = p_eb_zma,
+  width  = 8,
+  height = 5,
+  dpi    = 300
+)
+```
+
+# 3.3 Spatial variability of duplicated genes
+```{r}
+assayNames(zma_spe_valid)
+
+assay(zma_spe_valid, "counts") <- assay(zma_spe_valid, "logcounts")
+
+assayNames(zma_spe_valid)
+
+```
+
+```{r}
+# Define helper function to identify SVGs with DESpace
+get_svg <- function(spe, spatial_cluster = "Celltype") {
+  
+  res <- DESpace_test(
+    spe              = spe,
+    spatial_cluster  = spatial_cluster,
+    replicates       = FALSE,
+    min_counts       = 1,
+    min_non_zero_spots = 5
+  )
+  gc()
+  
+  res_df <- res$gene_results |>
+    as.data.frame() |>
+    tibble::rownames_to_column("gene_id") |>
+    dplyr::filter(!is.na(FDR), FDR <= 0.05)
+  
+  return(res_df)
+}
+
+colData(zma_spe_valid)$Celltype   <- factor(colData(zma_spe_valid)$Celltype)
+colData(zma_spe_valid)$Orig.ident <- factor(colData(zma_spe_valid)$Orig.ident)
+colData(zma_spe_valid)$Condition  <- factor(colData(zma_spe_valid)$Condition)
+
+res <- dsp_test(
+  spe = zma_spe_valid,
+  cluster_col = "Celltype",
+  sample_col = "Orig.ident",
+  condition_col = "Condition",
+  test = "QLF",
+  min_counts = 1,
+  min_non_zero_spots = 5,
+  verbose = TRUE
+)
+```
+
+```{r}
+# Get svgs
+get_svg <- function(spe, spatial_cluster = "Celltype", fdr_cutoff = 0.05) {
+
+  res <- DESpace::svg_test(
+    spe = spe,
+    cluster_col = spatial_cluster,
+    min_counts = 1,
+    min_non_zero_spots = 5
+  )
+
+  res_df <- res$gene_results |>
+    as.data.frame() |>
+    tibble::rownames_to_column("gene_id") |>
+    dplyr::filter(!is.na(FDR), FDR <= fdr_cutoff)
+
+  res_df
+}
+
+# Identify SVGs
+svgs <- list(
+  zma = get_svg(zma_spe_valid, spatial_cluster = "Celltype")
+)
+
+
+```
+
+```{r}
+# Define helper function to perform ORA for duplication modes
+ora_dupmode <- function(svg_df, dup_df) {
+  df <- HybridExpress::ora(
+    genes       = svg_df$gene_id,
+    annotation  = as.data.frame(dup_df),
+    background  = dup_df$gene,
+    min_setsize = 2,
+    max_setsize = 1e8
+  )
+  return(df)
+}
+
+# Zma duplication annotation
+dup_zma_genes <- dup_list_valid[["zma"]]$genes  # columns: gene, type
+
+ora_svg_dup_zma <- lapply(
+  svgs[["zma"]],
+  ora_dupmode,
+  dup_df = dup_zma_genes
+) |>
+  dplyr::bind_rows(.id = "sample") |>
+  dplyr::mutate(species = "Zma") |>
+  dplyr::select(
+    species,
+    sample,
+    type = term,
+    genes,
+    all,
+    padj
+  )
+
+head(ora_svg_dup_zma)
+```
