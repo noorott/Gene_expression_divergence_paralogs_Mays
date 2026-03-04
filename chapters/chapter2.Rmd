@@ -77,12 +77,13 @@ It contains a mixed annotation set with different ID types:
 
 The d in Zm00001dxxxxx means that the IDs are in genome version V4
 
-We are interested in the standard nuclear protein-coding genes, so we extract those IDs starting with Zm00.
-Eli: are mito proteins not relevant as well?
+We will only analyse nuclear protein-coding genes, so IDs starting with Zm00 are extracted
+
 ```{r}
 sceIDs <- sceIDs[grep("Zm00", sceIDs)]
+length(sceIDs)
 ```
-
+Retain 41856 genes (from the original 67300)
 ```{r}
 # Remove Zm00001d pattern and get the second part
 sce_nums <- gsub("Zm00001d", "", sceIDs)
@@ -95,14 +96,19 @@ head(dupIDs)
 ```
 Here, all gene IDs are in the Zm00001ebxxxxx format; they are nuclear gene IDs from version 5. Gene IDs are thus not compatible. We will convert the IDs from the sce objects from version 4 to 5 with a conversion table.
 
+An ID conversion table is obtained from following website after supplying a file with the IDs from sceIDs:
+https://plants.ensembl.org/Zea_mays/Tools/IDMapper
 
-Gene ID version conversion table from ...?
+```{r}
+writeLines(sceIDs, "../Duplication_data/Zma_nuclearcoding_geneIDs.txt")
+```
+
 
 Read in and clean the conversion file 
 - remove unneeded duplicate rows
 - remove version number: e.g. Zm00001d001763.1 -> Zm00001d001763
 ```{r}
-id_conversionTable <- read.csv("../Duplication_data/zma_ID_converter.txt", 
+id_conversionTable <- read.csv("../Duplication_data/Zma_idConverter_nuclearCoding.txt", 
                      check.names = FALSE, 
                      stringsAsFactors = FALSE)
 
@@ -116,6 +122,7 @@ id_conversionTable <- id_conversionTable %>%
   )
 
 head(id_conversionTable[, c("Old stable ID", "Old_Cleaned")])
+nrow(id_conversionTable)
 ```
 
 ```{r}
@@ -151,15 +158,9 @@ Of the 32927 gene IDs present in the ID conversion table, all are present in the
 Eli: probably just genes which are not a duplicate so no problem?
 
 ```{r}
-table(sceIDs %in% id_conversionTable$Old_Cleaned)
+table(sceIDs %in% final_IDmatch$Old_Cleaned)
 ```
 10 000 genes from our sce object are not in the conversion table --> problem? 
-
-Are these genes that don't need to be converted?
-```{r}
-table(sceIDs[!sceIDs %in% id_conversionTable$Old_Cleaned] %in% dupIDs)
-```
-Not in dupIDS so should be converted
 
 
 ## 1.5 Create paralog sce objects
@@ -191,7 +192,6 @@ rownames(summarized_sce_paralogs) <- valid_matches$New_Cleaned
 ```
 
 The same is done for the non-summarized single cell experiment object
-
 ```{r}
 sce_paralogs <- readRDS("uncorrected_sce.rds")
 ```
@@ -227,10 +227,13 @@ saveRDS(duplication_info, "../Duplication_data/duplication_info")
 saveRDS(duplication_info_filtered, "../Duplication_data/duplication_info_filtered")
 ```
 
-v
+
 TO DO:
-- investigate problem line 156
 - maybe implement here system
+
+QUESTIONS
+- can use other gene types besides nuclear coding?
+- loss of 10k genes when constructing ID conversion table normal
 
 ```{r}
 sessionInfo()
