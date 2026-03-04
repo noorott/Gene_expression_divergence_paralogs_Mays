@@ -26,7 +26,7 @@ library(SingleCellExperiment)
 zma_allgenes.tsv contains a list of all paralog genes of zea mays and their duplication type.
 zma_allpairs.tsv contains a list of all the paralog **pairs**, as well as info on the duplication type, age (ks/ka) and if possible, the age group (there were two peaks of gene duplication in the evolutionary histort of zea mays corresponding to two WGD events)
 
-Download these 2 files from mail from fabricio "Design project question paralog files"
+Download these 2 files from mail from fabricio "Design project question paralog files". They should be put in a folder "Duplication_data", next to the folders: chapters, plots_and_figures, ...
 
 ```{r}
 paralog_genes <- read_tsv("../Duplication_data/zma_allgenes.tsv")
@@ -156,12 +156,6 @@ cat("\nNumber of conversion IDs matching dup IDs:",
 ```
 Of the 32927 gene IDs present in the ID conversion table, all are present in the sce object. However, 3458 are not present in the dup list
 Eli: probably just genes which are not a duplicate so no problem?
-
-```{r}
-table(sceIDs %in% final_IDmatch$Old_Cleaned)
-```
-10 000 genes from our sce object are not in the conversion table --> problem? 
-
 
 ## 1.5 Create paralog sce objects
 
