@@ -20,3 +20,11 @@ chapters/pairwise_dataset_overlap.docx
 products
 products.zip
 .Rdata
+chapters/sce_paralogs.rds
+chapters/uncorrected_sce.rds
+chapters/summarized_sce_paralogs.rds
+Duplication_data/duplication_info
+Duplication_data/duplication_info_filtered
+Duplication_data/zma_allgenes.tsv
+Duplication_data/zma_allpairs.tsv
+Duplication_data/Zma_nuclearcoding_geneIDs.txt
