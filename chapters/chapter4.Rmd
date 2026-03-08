@@ -1,0 +1,53 @@
+---
+title: "chapter4"
+output: html_document
+execute: 
+  echo: true
+  eval: false
+  warning: false
+---
+
+# Expression divergence between duplicate pairs
+
+In this chapter, we will explore expression divergence between duplicate
+pairs using different metrics to investigate if there is biased divergence
+depending on the duplication mechanisms. 
+
+First load required packages:
+```{r}
+library(exdiva)
+library(SingleCellExperiment)
+library(SuperCell)
+```
+
+
+Read in the SingleCellExperiment created in chapter1:
+```{r}
+sce <- readRDS("uncorrected_sce_RedDim.rds")
+```
+
+
+We need to do metacell aggregation to reduce noise in the data.
+We do this using the SuperCell package
+
+Create the metacells
+```{r}
+sc <- SCimplify(
+  X = assay(sce, 'logcounts'),
+  gamma = 30,  # proportion of number of single cells in the initial dataset to the number of metacells in the final dataset
+)
+```
+sc$membership gives the metacell ID for each cell
+
+```{r}
+metacell_counts <- supercell_GE(
+  ge = assay(sce, "counts"),
+  groups = sc$membership,
+  mode = "sum"
+)
+
+metacell_sce <- SingleCellExperiment(
+  assays = list(counts = metacell_counts)
+)
+```
+
