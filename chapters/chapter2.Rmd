@@ -10,7 +10,7 @@ In this chapter we will annotate the genes from our single cell experiment objec
 # 1 Environment settings
 ## 1.1 Load packages
 
-```{r}
+```{r, message=FALSE}
 library(here)
 library(tidyverse)
 library(SummarizedExperiment)
@@ -28,7 +28,7 @@ zma_allpairs.tsv contains a list of all the paralog **pairs**, as well as info o
 
 Download these 2 files from mail from fabricio "Design project question paralog files". They should be put in a folder "Duplication_data", next to the folders: chapters, plots_and_figures, ...
 
-```{r}
+```{r, message=FALSE}
 paralog_genes <- read_tsv("../Duplication_data/zma_allgenes.tsv")
 paralog_pairs <- read_tsv("../Duplication_data/zma_allpairs.tsv")
 ```
