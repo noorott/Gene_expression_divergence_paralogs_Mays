@@ -75,7 +75,10 @@ WGCNA::allowWGCNAThreads(nThreads = 10)
 GCN inference is done with log normalized counts
 ```{r}
 mat <- as.matrix(assay(sce, "logcounts.sum"))
+
+mat <- mat[1:1000, ] # temporary for testing
 ```
+
 
 Optimal beta value is determined with the function SFT_fit()
 ```{r}
