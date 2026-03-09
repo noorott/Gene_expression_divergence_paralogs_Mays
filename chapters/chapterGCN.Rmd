@@ -13,8 +13,8 @@ Load packages
 library(SingleCellExperiment)
 library(tidyverse)
 library(here)
-library(BioNERO)
-library(exdiva) # had to install this one from GitHub, not available on Bioconductor
+library(BioNERO) # BiocManager::install("almeidasilvaf/BioNERO")
+library(exdiva) # BiocManager::install("almeidasilvaf/exdiva")
 ```
 
 
@@ -60,7 +60,7 @@ Due to the high sparsity of scRNA data, we will aggregate cells into metacells b
 
 GCN inference is done using the package BioNERO. This package implements the WGCNA algorithm. 
 
-Expression values are transformed into a pairwise similarities, calculated the pairwise gene correlations. An unsigned method treats negative correlations the same as positive by taking the absolute value. In a signed method the transformation is constructed a little different to only pick up on positive correlations.
+Expression values are transformed into a pairwise similarities, calculated based on the pairwise gene correlations. An unsigned method treats negative correlations the same as positive by taking the absolute value. In a signed method the transformation is constructed a little different to only pick up on positive correlations.
 
 Next, the similarity matrix is raised to a power beta to define the adjacency matrix. This is done to amplify distances. Values close to 1 will change relatively little while lower values will decrease. Using a higher beta results in a more scale-free topology (= most nodes have little edges, selected amount of a lot; desired characteristic in biological network). However, it also reduces mean connectivity.
 
@@ -82,7 +82,7 @@ mat <- mat[1:1000, ] # temporary for testing
 
 Optimal beta value is determined with the function SFT_fit()
 ```{r}
-sft <- SFT_fit(mat, net_type = "signed hybrid", cor_method = "pearson")
+sft <- SFT_fit(mat, net_type = "signed hybrid", cor_method = "spearman")
 ```
 
 Take a look at results
@@ -96,7 +96,7 @@ Infer GCN
 ```{r}
 gcn <- exp2gcn(
   mat,
-  net_type = "signed hybrid",
+  net_type = "signed hybrid", # hybrid: sim = cor if cor>0 else 0
   SFTpower = sft$power,       # use optimal beta from SFT_fit function
   cor_method = "spearman",   
   return_cormat = FALSE,      # whether you want the correlation matrix
@@ -114,8 +114,9 @@ hubs <- get_hubs_gcn(mat, gcn)
 
 QUESTIONS
 
-- GCN inference should probably be with expression of every gene
+- GCN inference should probably be with expression of every gene (not just the paralogs)
 - simpleWarning in eval(xpr, envir = envir): Some correlations are NA in block 28843 : 29469 . * 195 when running SFT_fit
+- error in get_hubs_gcn
 
 
 
