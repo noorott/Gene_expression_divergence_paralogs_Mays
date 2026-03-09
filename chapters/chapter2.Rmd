@@ -29,8 +29,8 @@ zma_allpairs.tsv contains a list of all the paralog **pairs**, as well as info o
 Download these 2 files from mail from fabricio "Design project question paralog files". They should be put in a folder "Duplication_data", next to the folders: chapters, plots_and_figures, ...
 
 ```{r, message=FALSE}
-paralog_genes <- read_tsv("../Duplication_data/zma_allgenes.tsv")
-paralog_pairs <- read_tsv("../Duplication_data/zma_allpairs.tsv")
+paralog_genes <- read_tsv(here("Duplication_data", "zma_allgenes.tsv"))
+paralog_pairs <- read_tsv(here("Duplication_data", "zma_allpairs.tsv"))
 ```
 Combine these 2 into 1 object
 ```{r}
@@ -57,7 +57,7 @@ head(duplication_info$genes, 5)
 
 Load in the single cell sequencing data obtained from chapter 1. 
 ```{r}
-summarized_sce <- readRDS("summarized_sce.rds")
+summarized_sce <- readRDS(here("chapters","summarized_sce.rds"))
 ```
 
 ## 1.4 Check gene ID compatibility
@@ -100,7 +100,7 @@ An ID conversion table is obtained from following website after supplying a file
 https://plants.ensembl.org/Zea_mays/Tools/IDMapper
 
 ```{r}
-writeLines(sceIDs, "../Duplication_data/Zma_nuclearcoding_geneIDs.txt")
+writeLines(sceIDs, here("Duplication_data", "Zma_nuclearcoding_geneIDs.txt"))
 ```
 
 
@@ -108,7 +108,7 @@ Read in and clean the conversion file
 - remove unneeded duplicate rows
 - remove version number: e.g. Zm00001d001763.1 -> Zm00001d001763
 ```{r}
-id_conversionTable <- read.csv("../Duplication_data/Zma_idConverter_nuclearCoding.txt", 
+id_conversionTable <- read.csv(here("Duplication_data", "Zma_idConverter_nuclearCoding.txt"), 
                      check.names = FALSE, 
                      stringsAsFactors = FALSE)
 
@@ -187,7 +187,7 @@ rownames(summarized_sce_paralogs) <- valid_matches$New_Cleaned
 
 The same is done for the non-summarized single cell experiment object
 ```{r}
-sce_paralogs <- readRDS("uncorrected_sce.rds")
+sce_paralogs <- readRDS(here("chapters" ,"uncorrected_sce.rds"))
 ```
 ```{r}
 sce_paralogs <- sce_paralogs[sce_paralog_ids, ]
@@ -215,15 +215,12 @@ duplication_info_filtered$pairs <- duplication_info$pairs %>%
 
 Final objects are saved for later use
 ```{r}
-saveRDS(summarized_sce_paralogs, "summarized_sce_paralogs.rds")
-saveRDS(sce_paralogs, "sce_paralogs.rds")
-saveRDS(duplication_info, "../Duplication_data/duplication_info")
-saveRDS(duplication_info_filtered, "../Duplication_data/duplication_info_filtered")
+saveRDS(summarized_sce_paralogs, here("chapters", "summarized_sce_paralogs.rds"))
+saveRDS(sce_paralogs, here("chapters", "sce_paralogs.rds"))
+saveRDS(duplication_info, here("Duplication_data", "duplication_info.rds"))
+saveRDS(duplication_info_filtered, here("Duplication_data", "duplication_info_filtered.rds"))
 ```
 
-
-TO DO:
-- maybe implement here system
 
 QUESTIONS
 - can use other gene types besides nuclear coding?

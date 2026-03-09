@@ -1,0 +1,124 @@
+---
+title: "Chapter ?: network-based analysis"
+author: "Eli Galle"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+In this chapter, we will study the patterns of gene expression in paralogs using gene coexpression networks.
+
+
+Load packages
+```{r setup, message=FALSE, warning=FALSE}
+library(SingleCellExperiment)
+library(tidyverse)
+library(here)
+library(BioNERO)
+library(exdiva) # had to install this one from GitHub, not available on Bioconductor
+```
+
+
+For reproducibility
+```{r}
+set.seed(604)
+```
+
+Setting aesthetics for figures
+```{r}
+# Plot background
+bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
+
+# Define color palette for duplication modes
+dup_pal <- c(
+    SD = "#000000",  
+    TD = "#E69F00",
+    PD = "#56B4E9",
+    rTRD = "#009E73",
+    dTRD = "#F0E442",
+    DD = "#0072B2"
+)
+```
+
+Loading in expression and paralog data and from chapter 2
+```{r}
+#sce <- readRDS(here("chapters", "sce_paralogs.rds"))
+sce <- readRDS(here("chapters", "summarized_sce_paralogs.rds")) # placeholder for metacells
+dup_info <- readRDS(here("Duplication_data", "duplication_info.rds"))
+dup_genes <- dup_info$genes
+dup_pairs <- dup_info$pairs
+rm(dup_info)
+```
+
+
+## Metacell aggregation
+
+Due to the high sparsity of scRNA data, we will aggregate cells into metacells before GCN inference.
+
+
+
+## GCN inference
+
+GCN inference is done using the package BioNERO. This package implements the WGCNA algorithm. 
+
+Expression values are transformed into a pairwise similarities, calculated the pairwise gene correlations. An unsigned method treats negative correlations the same as positive by taking the absolute value. In a signed method the transformation is constructed a little different to only pick up on positive correlations.
+
+Next, the similarity matrix is raised to a power beta to define the adjacency matrix. This is done to amplify distances. Values close to 1 will change relatively little while lower values will decrease. Using a higher beta results in a more scale-free topology (= most nodes have little edges, selected amount of a lot; desired characteristic in biological network). However, it also reduces mean connectivity.
+
+The resulting network can then be analyzed using clustering methods to identify modules of genes that are adjacent.
+
+```{r}
+# to speed up calculations
+# change nThreads depending on how many you have (parallel::detectCores())
+WGCNA::allowWGCNAThreads(nThreads = 10)
+```
+
+GCN inference is done with log normalized counts
+```{r}
+mat <- as.matrix(assay(sce, "logcounts.sum"))
+
+mat <- mat[1:1000, ] # temporary for testing
+```
+
+
+Optimal beta value is determined with the function SFT_fit()
+```{r}
+sft <- SFT_fit(mat, net_type = "signed hybrid", cor_method = "pearson")
+```
+
+Take a look at results
+```{r}
+sft$power
+sft$plot
+```
+Detected optimal beta = 18
+
+Infer GCN
+```{r}
+gcn <- exp2gcn(
+  mat,
+  net_type = "signed hybrid",
+  SFTpower = sft$power,       # use optimal beta from SFT_fit function
+  cor_method = "spearman",   
+  return_cormat = FALSE,      # whether you want the correlation matrix
+  verbose = TRUE
+)
+```
+
+
+Extract hubs; groups of highly co-expressed genes
+```{r}
+hubs <- get_hubs_gcn(mat, gcn)
+```
+
+
+
+QUESTIONS
+
+- GCN inference should probably be with expression of every gene
+- simpleWarning in eval(xpr, envir = envir): Some correlations are NA in block 28843 : 29469 . * 195 when running SFT_fit
+
+
+
+
+
+
