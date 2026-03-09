@@ -69,14 +69,22 @@ The resulting network can then be analyzed using clustering methods to identify 
 ```{r}
 # to speed up calculations
 # change nThreads depending on how many you have (parallel::detectCores())
-WGCNA::allowWGCNAThreads(nThreads = 10)
+WGCNA::allowWGCNAThreads(nThreads = 34)
 ```
 
 GCN inference is done with log normalized counts
 ```{r}
 mat <- as.matrix(assay(sce, "logcounts.sum"))
+mat <- mat[1:1000, ] #placeholder to speed up calculations in testing
+```
 
-mat <- mat[1:1000, ] # temporary for testing
+
+We will do some additional preprocessing steps
+- filtering genes that are not (little) expressed
+- adjustment for confounding artifacts
+```{r}
+mat <- remove_nonexp(mat, method = "median", min_exp=10)
+mat <- PC_correction(mat)
 ```
 
 
@@ -90,7 +98,7 @@ Take a look at results
 sft$power
 sft$plot
 ```
-Detected optimal beta = 18
+
 
 Infer GCN
 ```{r}
@@ -115,8 +123,9 @@ hubs <- get_hubs_gcn(mat, gcn)
 QUESTIONS
 
 - GCN inference should probably be with expression of every gene (not just the paralogs)
-- simpleWarning in eval(xpr, envir = envir): Some correlations are NA in block 28843 : 29469 . * 195 when running SFT_fit
-- error in get_hubs_gcn
+- preprocessing see vignete BioNERO, particularly the PCA_correct (see paper in ?PC_correction) + no prepro in Fabricio paper?
+- error in get_hubs_gcn: Warning: first element used of 'length.out' argumentError in seq_len(nrow(hubs)) : 
+  argument must be coercible to non-negative integer
 
 
 
