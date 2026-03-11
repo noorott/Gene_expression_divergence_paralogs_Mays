@@ -13,14 +13,19 @@ Load packages
 library(SingleCellExperiment)
 library(tidyverse)
 library(here)
-library(BioNERO)
-library(exdiva) # had to install this one from GitHub, not available on Bioconductor
+library(BioNERO) # BiocManager::install("almeidasilvaf/BioNERO")
+library(exdiva) # BiocManager::install("almeidasilvaf/exdiva")
 ```
 
 
 For reproducibility
 ```{r}
 set.seed(604)
+```
+
+For making figures work on hpc
+```{r}
+options(bitmapType = "cairo")
 ```
 
 Setting aesthetics for figures
@@ -50,17 +55,11 @@ rm(dup_info)
 ```
 
 
-## Metacell aggregation
-
-Due to the high sparsity of scRNA data, we will aggregate cells into metacells before GCN inference.
-
-
-
 ## GCN inference
 
 GCN inference is done using the package BioNERO. This package implements the WGCNA algorithm. 
 
-Expression values are transformed into a pairwise similarities, calculated the pairwise gene correlations. An unsigned method treats negative correlations the same as positive by taking the absolute value. In a signed method the transformation is constructed a little different to only pick up on positive correlations.
+Expression values are transformed into a pairwise similarities, calculated based on the pairwise gene correlations. An unsigned method treats negative correlations the same as positive by taking the absolute value. In a signed method the transformation is constructed a little different to only pick up on positive correlations.
 
 Next, the similarity matrix is raised to a power beta to define the adjacency matrix. This is done to amplify distances. Values close to 1 will change relatively little while lower values will decrease. Using a higher beta results in a more scale-free topology (= most nodes have little edges, selected amount of a lot; desired characteristic in biological network). However, it also reduces mean connectivity.
 
@@ -69,20 +68,27 @@ The resulting network can then be analyzed using clustering methods to identify 
 ```{r}
 # to speed up calculations
 # change nThreads depending on how many you have (parallel::detectCores())
-WGCNA::allowWGCNAThreads(nThreads = 10)
+WGCNA::allowWGCNAThreads(nThreads = 34)
 ```
 
 GCN inference is done with log normalized counts
 ```{r}
 mat <- as.matrix(assay(sce, "logcounts.sum"))
-
-mat <- mat[1:1000, ] # temporary for testing
+mat <- mat[1:1000, ] #placeholder to speed up calculations in testing
 ```
 
 
+We will do some additional preprocessing steps
+- filtering genes that are not (little) expressed
+- adjustment for confounding artifacts
+```{r}
+mat <- remove_nonexp(mat, method = "median", min_exp=10)
+```
+mean of 1 also used
+
 Optimal beta value is determined with the function SFT_fit()
 ```{r}
-sft <- SFT_fit(mat, net_type = "signed hybrid", cor_method = "pearson")
+sft <- SFT_fit(mat, net_type = "signed hybrid", cor_method = "spearman")
 ```
 
 Take a look at results
@@ -90,13 +96,13 @@ Take a look at results
 sft$power
 sft$plot
 ```
-Detected optimal beta = 18
+
 
 Infer GCN
 ```{r}
 gcn <- exp2gcn(
   mat,
-  net_type = "signed hybrid",
+  net_type = "signed hybrid", # hybrid: sim = cor if cor>0 else 0
   SFTpower = sft$power,       # use optimal beta from SFT_fit function
   cor_method = "spearman",   
   return_cormat = FALSE,      # whether you want the correlation matrix
@@ -107,16 +113,68 @@ gcn <- exp2gcn(
 
 Extract hubs; groups of highly co-expressed genes
 ```{r}
-hubs <- get_hubs_gcn(mat, gcn)
+hubs <- get_hubs_gcn(as.matrix(mat), gcn)
+hubs 
+
+head(gcn$genes_and_modules)
+
+# Extract hubs
+gcn$genes_and_modules |> head()
+gcn$kIN |> head()
+dim(gcn$kIN)
+dim(mat)
+head(mat)
+head(gcn$genes_and_modules)
+
+final_df <- cbind(gcn$genes_and_modules, gcn$kIN) |>
+  filter(Modules != "grey")
+
+# split in tables for each model
+# get top 10% 
+hubs <- lapply(split(final_df, final_df$Modules), function(x) {
+  hubs_vec <- x |>
+    arrange(-kWithin) |>
+    slice_head(n = round(nrow(x) * 0.1)) |>
+    pull(Genes)
+  
+  return(hubs_vec)
+  
+})
+
+unlist(hubs)
 ```
 
+
+```{r}
+gcn
+```
+
+```{r}
+plot_dendro_and_colors(gcn)
+```
+
+```{r}
+plot_eigengene_network(gcn)
+```
+```{r}
+plot_ngenes_per_module(gcn)
+```
 
 
 QUESTIONS
 
-- GCN inference should probably be with expression of every gene
-- simpleWarning in eval(xpr, envir = envir): Some correlations are NA in block 28843 : 29469 . * 195 when running SFT_fit
+- GCN inference should probably be with expression of every gene (not just the paralogs) --> not necessary
+- metalcells --> seurat package hdWGCNA for metacell or metacells on python (convert rds files with zellkonverter)
+- preprocessing see vignete BioNERO, particularly the PCA_correct (see paper in ?PC_correction) + no prepro in Fabricio paper?
 
+
+- error in get_hubs_gcn: Warning: first element used of 'length.out' argumentError in seq_len(nrow(hubs)) : 
+  argument must be coercible to non-negative integer
+  
+try myself: 
+  
+
+scater:plotReducedDim to plot 2 paralogs on the general 
 
 
 
