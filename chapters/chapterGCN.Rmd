@@ -166,6 +166,7 @@ QUESTIONS
 - GCN inference should probably be with expression of every gene (not just the paralogs) --> not necessary
 - metalcells --> seurat package hdWGCNA for metacell or metacells on python (convert rds files with zellkonverter)
 - preprocessing see vignete BioNERO, particularly the PCA_correct (see paper in ?PC_correction) + no prepro in Fabricio paper?
+--> filter for low but no PCA_correct
 
 
 - error in get_hubs_gcn: Warning: first element used of 'length.out' argumentError in seq_len(nrow(hubs)) : 
@@ -178,5 +179,8 @@ scater:plotReducedDim to plot 2 paralogs on the general
 
 
 
+```{r}
+names(colData(sce))
+```
 
 
