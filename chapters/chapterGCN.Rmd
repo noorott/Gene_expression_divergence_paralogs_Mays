@@ -154,8 +154,3 @@ scater:plotReducedDim to plot 2 paralogs on the general
 
 
 
-```{r}
-names(colData(sce))
-```
-
-
