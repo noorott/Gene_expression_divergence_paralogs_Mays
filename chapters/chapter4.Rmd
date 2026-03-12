@@ -23,7 +23,7 @@ library(SuperCell)
 
 Read in the SingleCellExperiment created in chapter1:
 ```{r}
-sce <- readRDS("uncorrected_sce_RedDim.rds")
+sce <- readRDS("sce_paralogs.rds ")
 ```
 
 
