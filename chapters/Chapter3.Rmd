@@ -250,7 +250,104 @@ ggsave(
 ```
 
 ## 2.3 Expression breadths of duplicated genes
+Expression breadths (the number of tissues in which a gene is expressed) are calculated for Zea mayse duplicate genes, and the differences in expression breadth by duplication mode are compared using Kruskal-Wallis and Dunn's post-hoc tests.
 
+Helpter function to calculate the proportion of cells in which each gene is detected for each cell type. This will be used to assess expression breadth across cell types.
+```{r}
+#' Calculate the proportion of cells in which each gene is detected for each cell type
+#' @paramam sce A SingleCellExperiment or SpatialExperiment object containing the data.
+#' @param cell_type_col Character, name of the column in colData(sce) that contains cell type annotations. Default is "Celltype".
+#' @return A data frame with columns: gene, cell_type, prop_detected.
+
+get_prop_detected <- function(sce, cell_type_col = "Celltype") {
+  prop_detected <- scuttle::aggregateAcrossCells(
+    sce,
+    statistics   = "prop.detected",
+    ids          = sce[[cell_type_col]]
+  ) |>
+    assay() |>
+    reshape2::melt() |>
+    dplyr::select(gene = Var1, cell_type = Var2, prop_detected = value) |>
+    dplyr::mutate(cell_type = as.character(cell_type))
+  
+  return(prop_detected)
+}
+```
+
+Calculate absolute expression breadth.
+```{r}
+# A gene is considered expressed in a cell type if it is detected in at least 1%% of spots in that cell type
+prop_detected_zma <- get_prop_detected(sce_paralogs, cell_type_col = "Celltype")
+
+eb_zma <- prop_detected_zma |>
+  # Average detection proportion across spots within each cell type
+  dplyr::group_by(gene, cell_type) |>
+  dplyr::mutate(mean_prop = mean(prop_detected, na.rm = TRUE)) |>
+  dplyr::ungroup() |>
+  # Keep only cell types where the gene clears the 1% detection threshold
+  dplyr::filter(mean_prop >= 0.01) |>
+  dplyr::distinct(gene, cell_type, .keep_all = TRUE) |>
+  # Count the number of cell types each gene is expressed in (= expression breadth)
+  dplyr::count(gene) |>
+  # Join with duplication mode information
+  dplyr::inner_join(dup_list_valid$genes, by = "gene") |>
+  dplyr::mutate(type = factor(type, levels = names(dup_pal)))
+```
+
+Check the resulting absolute expression breadth
+```{r}
+nrow(eb_zma)
+head(eb_zma)
+```
+
+Conduct statistical testing (Kruskal-Wallis, Dunn post-hoc test)
+```{r}
+# Returns a cld indicating which duplication types differ significantly from each other (BH-adjusted p<0.05)
+eb_cld <- cld_kw_dunn(eb_zma, var = "type", value = "n") |>
+  dplyr::rename(type = Group)
+
+eb_cld
+```
+
+Generate violin plot of absolute expression breadth by duplication mode with CLD labels. 
+```{r}
+plot_eb <- ggplot(eb_zma, aes(x = n, y = type)) +
+  geom_violin(aes(fill = type), show.legend = FALSE) +
+  scale_fill_manual(values = dup_pal) +
+  geom_boxplot(width = 0.1, outlier.color = "gray60", outlier.alpha = 0.5) +
+  # x position passed as a fixed value directly, not from the data
+  geom_label(
+    data  = eb_cld,
+    aes(y = type, label = Letter),
+    x     = Inf,          # places label at the far right edge of whatever the scale is
+    hjust = 1.1,          # nudges it just inside the right edge
+    fill  = "white", color = "black", label.size = 0.5, size = 5
+  ) +
+  # Let the x-axis scale freely to the data range — avoids removing out-of-range rows
+  scale_x_continuous(expand = expansion(mult = c(0.02, 0.15))) +
+  labs(
+    title    = "Absolute expression breadth and gene duplication mode",
+    subtitle = "CLD from Kruskal-Wallis + post-hoc Dunn's test; P <0.05",
+    x        = "Number of cell types in which gene is detected",
+    y        = NULL
+  ) +
+  theme_classic() +
+  theme(panel.background = element_rect(fill = bg))
+
+plot_eb
+
+ggsave(
+  file.path(here("products", "plots"), "Zma_Expression_Breadth_violin.png"),
+  plot   = plot_eb,
+  width  = 7,
+  height = 5,
+  dpi    = 300
+)
+```
+# 2.4 Frequency of duplicated genes by duplication mode
 ```{r}
 
 ```
+
+
+
