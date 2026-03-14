@@ -34,6 +34,7 @@ library(tibble)
 library(Matrix)
 library(stringr)
 library(ggplot2)
+library(HybridExpress)
 ```
 
 Load data
@@ -345,9 +346,120 @@ ggsave(
 )
 ```
 # 2.4 Frequency of duplicated genes by duplication mode
-```{r}
 
+Get unique sample IDs from the colData of the SpatialExperiment object to use as the background for ORA
+```{r}
+sample_ids <- unique(colData(sce_paralogs)$Dataset)
 ```
 
+Split the sce object into a named list, one entry per sample
+```{r}
+sce_list_zma <- setNames(
+  lapply(sample_ids, function(s) {
+    sce_paralogs[, colData(sce_paralogs)$Dataset == s]
+  }),
+  sample_ids
+)
+```
+
+For each sample, compute the proportion of cells in which each gene is detected, which will be used to determine which genes are considered "expressed" in each sample for the ORA analysis.
+```{r}
+prop_detected_list <- lapply(sce_list_zma, get_prop_detected, cell_type_col = "Celltype")
+```
+
+For each sample, derive the expression gene set. A gene is considered expressed in a cell type if it is detected in at least 1% of spots in that cell type. Then, we take the union of expressed genes across all cell types within each sample to get the final set of expressed genes for that sample.
+```{r}
+expressed_per_sample <- lapply(prop_detected_list, function(pd) {
+  pd |>
+    dplyr::group_by(gene, cell_type) |>
+    dplyr::mutate(mean_prop = mean(prop_detected, na.rm = TRUE)) |>
+    dplyr::ungroup() |>
+    dplyr::filter(mean_prop >= 0.01) |>
+    dplyr::distinct(gene, cell_type) |>
+    dplyr::pull(gene) |>
+    unique()
+})
+```
+
+Overrepresentation analysis (ORA) tests whether each duplication mode is over/underrepresented among expressed genes relative to the full background of all duplicated genes.
+```{r}
+ora_per_sample <- lapply(expressed_per_sample, function(expr_genes) {
+  HybridExpress::ora(
+    genes       = expr_genes,
+    annotation  = as.data.frame(dup_list_valid$genes),
+    background  = dup_list_valid$genes$gene,
+    min_setsize = 2,
+    max_setsize = 1e8
+  )
+})
+
+# Build ORA summary talbe
+# one row per sample x duplication type
+ora_df <- bind_rows(ora_per_sample, .id = "sample") |>
+  dplyr::select(sample, type = term, padj)
+```
+
+Count expressed genes per duplication mode and join ORA significance results
+```{r}
+freq_df <- lapply(names(expressed_per_sample), function(s) {
+  tibble::tibble(gene = expressed_per_sample[[s]]) |>
+    dplyr::inner_join(dup_list_valid$genes, by = "gene") |>
+    dplyr::mutate(type = factor(type, levels = names(dup_pal))) |>
+    dplyr::count(type, .drop = FALSE) |>
+    dplyr::mutate(sample = s)
+}) |>
+  dplyr::bind_rows() |>
+  # Join ORA significance
+  dplyr::left_join(ora_df, by = c("sample", "type")) |>
+  dplyr::mutate(
+    symbol = dplyr::case_when(
+      is.na(padj)  ~ "",
+      padj > 0.05  ~ "",
+      padj > 0.01  ~ "*",
+      padj > 0.001 ~ "**",
+      TRUE         ~ "***"
+    ),
+    type = factor(type, levels = names(dup_pal))
+  )
+
+freq_df
+```
+
+Generate a heatmap showing the frequency of expressed genes by duplication mode with significance symbols from ORA
+```{r}
+p_heatmap <- freq_df |>
+  # Scale counts within each sample so colours are comparable across samples
+  dplyr::group_by(sample) |>
+  dplyr::mutate(scaled_n = scale(n, center = FALSE)) |>
+  dplyr::ungroup() |>
+  ggplot(aes(x = sample, y = type, fill = scaled_n)) +
+  geom_tile(color = "gray90", linewidth = 0.8) +
+  geom_text(aes(label = symbol), color = "gray20", size = 4) +
+  scale_fill_gradient(low = "#D6E5F4", high = "#2171B5") +
+  theme_classic() +
+  theme(
+    axis.text.x  = element_blank(),
+    axis.ticks.x = element_blank(),
+    legend.position = "bottom",
+    panel.background = element_rect(fill = bg)
+  ) +
+  labs(
+    title    = "Frequency of expressed duplicated genes by duplication mode",
+    subtitle = "Asterisks indicate significant overrepresentation",
+    x        = "Samples",
+    y        = NULL,
+    fill     = "Scaled counts"
+  )
+
+p_heatmap
+
+ggsave(
+  file.path(here("products", "plots"), "Zma_DupMode_Frequency_Heatmap.png"),
+  plot   = p_heatmap,
+  width  = 7,
+  height = 4,
+  dpi    = 300
+)
+```
 
 
