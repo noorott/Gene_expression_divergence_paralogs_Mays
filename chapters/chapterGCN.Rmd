@@ -18,11 +18,6 @@ library(exdiva) # BiocManager::install("almeidasilvaf/exdiva")
 ```
 
 
-For reproducibility
-```{r}
-set.seed(604)
-```
-
 For making figures work on hpc
 ```{r}
 options(bitmapType = "cairo")
@@ -97,29 +92,35 @@ sft$plot
 ```
 
 
-Infer GCN
-```{r}
-gcn <- exp2gcn(
-  mat,
-  net_type = "signed hybrid", # hybrid: sim = cor if cor>0 else 0
-  SFTpower = sft$power,       # use optimal beta from SFT_fit function
-  cor_method = "spearman",   
-  return_cormat = FALSE,      # whether you want the correlation matrix
-  verbose = TRUE
-)
-```
 
+Infer GCN 
+(Download from hpc)
 ```{r}
-saveRDS(gcn, "gcn.rds")
+run_gcn = FALSE
+
+if (run_gcn) {
+    gcn <- exp2gcn(
+    mat,
+    net_type = "signed hybrid", # hybrid: sim = cor if cor>0 else 0
+    SFTpower = sft$power,       # use optimal beta from SFT_fit function
+    cor_method = "spearman",   
+    return_cormat = FALSE,      # whether you want the correlation matrix
+    verbose = TRUE
+  )
+  saveRDS(gcn, "gcn.rds")
+
+} else {
+    gcn <- readRDS(here("chapters", "gcn.rds"))
+}
 ```
 
 Extract hubs; groups of highly co-expressed genes
 ```{r}
-# Extract hubs
+# Extract hubs,
 final_df <- cbind(gcn$genes_and_modules, gcn$kIN) |>
-  filter(Modules != "grey")
+  filter(Modules != "grey") # grey module is the trash bin module
 
-# split in tables for each model
+# split in tables for each module; want every module in the gcn to be represented
 # get top 10% 
 hubs <- lapply(split(final_df, final_df$Modules), function(x) {
   hubs_vec <- x |>
@@ -128,9 +129,12 @@ hubs <- lapply(split(final_df, final_df$Modules), function(x) {
     pull(Genes)
   
   return(hubs_vec)
-  
-})
+  }
+)
+```
 
+```{r}
+gcn$hubs <- hubs$
 ```
 
 
