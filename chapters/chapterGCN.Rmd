@@ -15,6 +15,7 @@ library(tidyverse)
 library(here)
 library(BioNERO) # BiocManager::install("almeidasilvaf/BioNERO")
 library(exdiva) # BiocManager::install("almeidasilvaf/exdiva")
+library(HybridExpress)
 ```
 
 
@@ -123,38 +124,66 @@ final_df <- cbind(gcn$genes_and_modules, gcn$kIN) |>
 # split in tables for each module; want every module in the gcn to be represented
 # get top 10% 
 hubs <- lapply(split(final_df, final_df$Modules), function(x) {
-  hubs_vec <- x |>
-    arrange(-kWithin) |>
-    slice_head(n = round(nrow(x) * 0.1)) |>
+  hubs_vec <- x %>%
+    arrange(-kWithin) %>%
+    slice_head(n = round(nrow(x) * 0.1)) %>%
     pull(Genes)
   
   return(hubs_vec)
   }
 )
+
+# converting list with hub genes for each module into vector of all hub genes
+# don't need to know from which module they were, so unname
+hubs <- unname(unlist(hubs))
 ```
+
+Summarize number of (paralog) hub genes per duplication mode, compare with background frequency.
+```{r}
+# count number of (paralog) hub genes per duplication mode
+dup_genes[dup_genes$gene %in% hubs, ]$type %>% 
+  table() %>%
+  prop.table() %>% 
+  round(3) * 100 #display as percentage
+
+# count number of (paralog) genes per duplication mode (=background frequency)
+dup_genes$type %>% 
+  table() %>% 
+  prop.table() %>% 
+  round(3) * 100 #display as percentage
+```
+Statistical test of over representation
 
 ```{r}
-gcn$hubs <- hubs$
+HybridExpress::ora(genes = hubs,
+    annotation = dup_genes,
+    background = dup_genes$gene,
+    max_setsize = 100000,
+    alpha = 1 # want all p-values for plot
+  )
+
 ```
 
 
 
+TODO
+
+scater:plotReducedDim to plot 2 paralogs on the general 
 
 QUESTIONS
 
+Resolved:
 - GCN inference should probably be with expression of every gene (not just the paralogs) --> not necessary
 - metalcells --> seurat package hdWGCNA for metacell or metacells on python (convert rds files with zellkonverter)
 - preprocessing see vignete BioNERO, particularly the PCA_correct (see paper in ?PC_correction) + no prepro in Fabricio paper?
 --> filter for low but no PCA_correct
 
+New:
+- why would you have max_setsize in HybridExpress::ora
 
-- error in get_hubs_gcn: Warning: first element used of 'length.out' argumentError in seq_len(nrow(hubs)) : 
-  argument must be coercible to non-negative integer
-  
-try myself: 
   
 
-scater:plotReducedDim to plot 2 paralogs on the general 
+
 
 
 
