@@ -25,7 +25,6 @@ library(here)
 ```{r}
 metacell_sce <- readRDS(here("chapters", "metacells.rds"))
 ```
-
 Read in the SingleCellExperiment created in chapter1
 
 We need to do metacell aggregation to reduce noise in the data.

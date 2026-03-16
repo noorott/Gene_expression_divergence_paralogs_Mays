@@ -68,13 +68,12 @@ The resulting network can then be analyzed using clustering methods to identify 
 ```{r}
 # to speed up calculations
 # change nThreads depending on how many you have (parallel::detectCores())
-WGCNA::allowWGCNAThreads(nThreads = 34)
+WGCNA::allowWGCNAThreads(nThreads = 36)
 ```
 
 GCN inference is done with log normalized counts
 ```{r}
-mat <- as.matrix(assay(sce, "logcounts.sum"))
-mat <- mat[1:1000, ] #placeholder to speed up calculations in testing
+mat <- sce
 ```
 
 
@@ -110,22 +109,13 @@ gcn <- exp2gcn(
 )
 ```
 
+```{r}
+saveRDS(gcn, "gcn.rds")
+```
 
 Extract hubs; groups of highly co-expressed genes
 ```{r}
-hubs <- get_hubs_gcn(as.matrix(mat), gcn)
-hubs 
-
-head(gcn$genes_and_modules)
-
 # Extract hubs
-gcn$genes_and_modules |> head()
-gcn$kIN |> head()
-dim(gcn$kIN)
-dim(mat)
-head(mat)
-head(gcn$genes_and_modules)
-
 final_df <- cbind(gcn$genes_and_modules, gcn$kIN) |>
   filter(Modules != "grey")
 
@@ -141,24 +131,9 @@ hubs <- lapply(split(final_df, final_df$Modules), function(x) {
   
 })
 
-unlist(hubs)
 ```
 
 
-```{r}
-gcn
-```
-
-```{r}
-plot_dendro_and_colors(gcn)
-```
-
-```{r}
-plot_eigengene_network(gcn)
-```
-```{r}
-plot_ngenes_per_module(gcn)
-```
 
 
 QUESTIONS
@@ -166,6 +141,7 @@ QUESTIONS
 - GCN inference should probably be with expression of every gene (not just the paralogs) --> not necessary
 - metalcells --> seurat package hdWGCNA for metacell or metacells on python (convert rds files with zellkonverter)
 - preprocessing see vignete BioNERO, particularly the PCA_correct (see paper in ?PC_correction) + no prepro in Fabricio paper?
+--> filter for low but no PCA_correct
 
 
 - error in get_hubs_gcn: Warning: first element used of 'length.out' argumentError in seq_len(nrow(hubs)) : 
@@ -175,8 +151,6 @@ try myself:
   
 
 scater:plotReducedDim to plot 2 paralogs on the general 
-
-
 
 
 

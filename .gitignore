@@ -28,3 +28,11 @@ Duplication_data/duplication_info_filtered
 Duplication_data/zma_allgenes.tsv
 Duplication_data/zma_allpairs.tsv
 Duplication_data/Zma_nuclearcoding_geneIDs.txt
+data
+.RDataTmp1
+.RDataTmp2
+Duplication_data/duplication_info_filtered.rds
+Duplication_data/duplication_info.rds
+Duplication_data/Zma_idConverter_nuclearCoding.txt
+Duplication_data.zip
+Duplication_data/Zma_idConverter_nuclearCoding.txt
