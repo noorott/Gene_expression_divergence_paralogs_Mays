@@ -155,15 +155,64 @@ dup_genes$type %>%
 Statistical test of over representation
 
 ```{r}
-HybridExpress::ora(genes = hubs,
+ora_HubsDup <- HybridExpress::ora(genes = hubs,
     annotation = dup_genes,
     background = dup_genes$gene,
     max_setsize = 100000,
     alpha = 1 # want all p-values for plot
   )
-
+ora_HubsDup
 ```
 
+Visualize with plot
+```{r}
+# reorder the df to the order in the color pallete for the duplication modes
+ora_HubsDup <- ora_HubsDup[match(names(dup_pal), ora_HubsDup$term),]
+
+figure_ora <- ora_HubsDup %>%
+  mutate(
+    term = factor(term, levels = c("SD",
+                                   "TD",
+                                   "PD",
+                                   "rTRD",
+                                   "dTRD",
+                                   "DD")),
+    logP = -log10(padj),
+    significant = ifelse(padj < 0.05, TRUE, FALSE),
+    symbol = case_when(
+      padj <= 0.05 & padj > 0.01 ~ "*",
+      padj <= 0.01 & padj > 0.001 ~ "**",
+      padj <= 0.001 ~ "***",
+      TRUE ~ ""
+    )
+  ) %>% 
+  ggplot(aes(x=genes, y=term)) +
+    geom_point(
+      aes(fill=term, size = logP, alpha = significant),
+      color = "gray20", pch = 21
+    ) +
+    scale_size(range = c(4, 9)) +
+    scale_alpha_manual(values = c(0.3, 1)) +
+    scale_fill_manual(values = dup_pal) +
+    geom_text(aes(label = symbol), vjust = -0.5, size = 5) +
+    scale_x_continuous(limits = c(0, 900)) +
+    theme_classic() +
+    guides(fill = "none", alpha = "none") +
+    labs(
+        title = "Duplication mode of hub genes in coexpression networks",
+        subtitle = "Bright dots with asterisks indicate significant overrepresentation; P <0.05",
+        x = "Number of hub genes", y = NULL,
+        size = expression(-Log[10] ~ italic(P))
+    )
+
+figure_ora
+```
+```{r}
+ggsave(here("plots_and_figures", "figure_ORA_DupMode_HubGenes.png"), 
+       figure_ora,
+       width = 6,
+       height = 5)
+```
 
 
 TODO
@@ -179,7 +228,9 @@ Resolved:
 --> filter for low but no PCA_correct
 
 New:
+- sft results
 - why would you have max_setsize in HybridExpress::ora
+
 
   
 
