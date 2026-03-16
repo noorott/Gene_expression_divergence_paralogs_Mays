@@ -42,7 +42,7 @@ dup_pal <- c(
 Loading in expression and paralog data and from chapter 2
 ```{r}
 #sce <- readRDS(here("chapters", "sce_paralogs.rds"))
-sce <- readRDS(here("chapters", "summarized_sce_paralogs.rds")) # placeholder for metacells
+sce <- readRDS(here("chapters", "summarized_sce_paralogs.rds")) 
 dup_info <- readRDS(here("Duplication_data", "duplication_info.rds"))
 dup_genes <- dup_info$genes
 dup_pairs <- dup_info$pairs
@@ -102,7 +102,7 @@ if (run_gcn) {
     gcn <- exp2gcn(
     mat,
     net_type = "signed hybrid", # hybrid: sim = cor if cor>0 else 0
-    SFTpower = sft$power,       # use optimal beta from SFT_fit function
+    SFTpower = 20,       
     cor_method = "spearman",   
     return_cormat = FALSE,      # whether you want the correlation matrix
     verbose = TRUE
