@@ -1,0 +1,44 @@
+---
+title: "Chapter_5"
+author: "Emmeline Van Rijswijck"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Frequency of genes in each divergence class originating from each duplication mode
+
+We will start from the data obtained in chapter 2; duplication_info_filtered (and summarized_sce_paralogs)
+
+# Reading in the data
+
+```{r}
+duplication_info_filtered <- readRDS("../Duplication_data/duplication_info_filtered.rds")
+duplication_info_filtered$genes
+```
+
+# Calculate the relative expression breadth
+
+The relative expression breadth REBA for gene A is defined as the proportion of cell types in which gene A is expressed relative to the total number of cell types in which either gene A or gene B is expressed.
+
+To calculate relative expression breadth, a dataset is required that indicates which genes are expressed in which cell types, typically represented as a matrix where each gene is scored for expression across all analyzed cell types; the breadth is then computed as the fraction of cell types in which a gene is expressed.
+
+Let's construct a matrix containing the following variables:
+- Gene 
+- Duplication mode
+- Location of expression 
+
+Metacells are used to reduce technical noise and dropout effects inherent to single-cell RNA sequencing data by aggregating transcriptionally similar cells, resulting in more robust expression profiles that allow a more reliable estimation of gene expression breadth across cell types.
+
+```{r}
+metacells <- readRDS('../Chapters/metacells.rds')
+names(assay(metacells))
+```
+#tissue_organ gebruiken!!! niet celltype!!!!!!! ale dus om REB te berekenen 
+
+
+
+
