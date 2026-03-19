@@ -128,12 +128,34 @@ separately for each age group.
 ```{r}
 # Ad all info to the correlation dataframe
 sp_coeff_age <- dplyr::inner_join(paralog_pairs$pairs, sp_coeff, by = c("dup1", "dup2"))
+
 ```
+
+
 
 ```{r}
 # Credits to Fabricio Almeida Silva 
 # Compare distros
 #' Wrapper function to compare distros with Kruskal-Wallis + Dunn
+cld_kw_dunn <- function(df, var = "type.x", value = "csum") {
+    
+    # Perform Kruskal-Wallis test followed by a post-hoc Dunn's test
+    dunn <- FSA::dunnTest(
+        df[[value]] ~ df[[var]], method = "bh"
+    ) |>
+        purrr::pluck("res") |>
+        arrange(Z)
+    
+    # Get compact letter display (CLD)
+    cld <- rcompanion::cldList(
+        comparison = dunn$Comparison,
+        p.value = dunn$P.adj,
+        threshold = 0.05
+    )
+    
+    return(cld)
+}
+
 compare_cors <- function(rho_df) {
     
     # Add a variable indicating sample + Ks peak
@@ -160,7 +182,35 @@ compare_cors <- function(rho_df) {
 }
 ```
 
+```{r, warning= FALSE, message=FALSE}
+comp_cors <- compare_cors(sp_coeff_age) |> mutate(species = "Zma")
+```
+!!! Check what type should be??
+
+
 ```{r}
-compare_cors(sp_coeff_age) |> mutate(species = "Zma")
+# Plot heatmap with CLDs
+p_heatmap_rho <- comp_cors |>
+    mutate(Group = factor(Group, levels = rev(names(dup_pal)))) |>
+    ggplot(aes(x = sample, y = Group, fill = Letter)) +
+    geom_tile(color = "gray90", linewidth = 0.8, alpha = 0.7) +
+    geom_text(aes(label = Letter), size = 3) +
+    ggh4x::facet_nested(~ species + peak_name, scales = "free", space = "free") +
+    theme_classic() +
+    theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
+    ) +
+    labs(
+        title = "Differences in gene-gene correlations by duplication mode",
+        subtitle = "CLD from Kruskal-Wallis + post-hoc Dunn's test; P <0.05",
+        x = "Samples", y = "Mode"
+    ) +
+    theme(
+        legend.position = "none"
+    ) +
+    ggsci::scale_fill_npg()
+
+p_heatmap_rho
 ```
 
