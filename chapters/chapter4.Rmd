@@ -133,8 +133,9 @@ separately for each age group.
 
 ```{r}
 # Ad all info to the correlation dataframe
-sp_coeff_age <- dplyr::inner_join(paralog_pairs$pairs, sp_coeff, by = c("dup1", "dup2"))
-
+sp_coeff_age <- dplyr::inner_join(paralog_pairs$pairs, sp_coeff, by = c("dup1", "dup2", "type")) 
+# Type can be added as an innerjoin key bc they will always be the same
+# This way we will only have 1 type column in the result
 ```
 
 
@@ -143,7 +144,7 @@ sp_coeff_age <- dplyr::inner_join(paralog_pairs$pairs, sp_coeff, by = c("dup1", 
 # Credits to Fabricio Almeida Silva 
 # Compare distros
 #' Wrapper function to compare distros with Kruskal-Wallis + Dunn
-cld_kw_dunn <- function(df, var = "type.x", value = "csum") {
+cld_kw_dunn <- function(df, var = "type", value = "csum") {
     
     # Perform Kruskal-Wallis test followed by a post-hoc Dunn's test
     dunn <- FSA::dunnTest(
@@ -191,7 +192,7 @@ compare_cors <- function(rho_df) {
 ```{r, warning= FALSE, message=FALSE}
 comp_cors <- compare_cors(sp_coeff_age) |> mutate(species = "Zma")
 ```
-!!! Check what type should be??
+
 ```{r}
 # we add a dummy "sample" column so that the downstream compare_cors()
 # function — which was written for multi-sample spatial data — works unchanged.
@@ -224,6 +225,11 @@ p_heatmap_rho <- comp_cors |>
 
 p_heatmap_rho
 ```
+POAC WGD: happened ∼53 MYA
+ZEAM WGD: happened ∼16 MYA 
+
+Older duplicates consistently display lower expression divergence, in line with findings from previous studies. Duplication mode also plays a clear role: in maize, paralogs show the greatest expression divergence among recent duplicates, for example in SD, TD, and dTRD. This contrasts with previous work, where duplication modes that preserve cis-regulatory landscapes — such as WGD and TRD — were associated with lower expression divergence compared to modes that disrupt them.
+
 # 3. Mean Fisher's z-transformed rho across the dataset
 
 Since we have a single metacell dataset (no multiple slides to average over),
