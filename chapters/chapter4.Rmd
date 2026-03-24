@@ -238,6 +238,11 @@ distribution by duplication mode — analogous to the `zrho_mean` analysis in
 the spatial transcriptomics study.
 
 ```{r}
+sp_coeff_age$sample <- "Zma_metacell"
+```
+
+
+```{r}
 # Get mean Fisher's Z-transformed rho estimates
 # (Here "mean" is over duplicate entries of the same pair; in practice each
 #  pair appears once so this collapses to the pair-level z-rho.)
@@ -254,7 +259,7 @@ zrho_mean <- sp_coeff_age |>
     distinct(pair, peak, .keep_all = TRUE) |>
     mutate(
         species = "Zma",
-        type = factor(type.x, levels = names(dup_pal)),
+        type = factor(type, levels = names(dup_pal)),
         peak = as.character(peak)
     ) |>
     dplyr::select(-c(sample, cor, pair))
