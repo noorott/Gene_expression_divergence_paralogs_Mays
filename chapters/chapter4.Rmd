@@ -324,7 +324,7 @@ mean_rho_zma <- sp_coeff_age |>
     ungroup() |>
     distinct(pair, .keep_all = TRUE) |>
     mutate(
-        type = factor(type.x, levels = names(dup_pal))
+        type = factor(type, levels = names(dup_pal))
     ) |>
     dplyr::select(zrho = mean_cor, Ks, Ka, type) |>
     filter(!zrho %in% c(Inf, -Inf), !is.na(zrho))
