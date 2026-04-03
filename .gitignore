@@ -28,6 +28,7 @@ chapters/summarized_sce_paralogs.rds
 chapters/gcn.rds
 chapters/summarized_sce.rds
 chapters/metacell_sce.rds
+chapters/gene_families.rds
 
 Duplication_data/duplication_info
 Duplication_data/duplication_info_filtered

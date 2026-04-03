@@ -103,7 +103,7 @@ dup_pal <- c(
 ```
 
 ```{r}
-# Create a dataframe containing only the duplicated pairs
+# Create a dataframe containing only the duplicated pairs and their type
 dups <- as.data.frame(paralog_pairs$pairs[, c("dup1", "dup2", "type")])
 
 # calculate the Spearman's correlation coëfficiënt using the exdiva package
@@ -195,7 +195,7 @@ comp_cors <- compare_cors(sp_coeff_age) |> mutate(species = "Zma")
 
 ```{r}
 # we add a dummy "sample" column so that the downstream compare_cors()
-# function — which was written for multi-sample spatial data — works unchanged.
+# function — which was written for multi-species/samples spatial data — works unchanged.
 comp_cors$sample <- "Zma_metacell"
 ```
 
@@ -388,6 +388,27 @@ p_rho_ks_zma <- mean_rho_zma |>
     )
 
 p_rho_ks_zma
+```
+
+## Expression divergence by gene family
+
+Here, we will explore how duplicates in each gene family diverge, looking
+for families that tend to have more similar expression profiles (i.e., less
+divergence), and families with more divergent expression profiles.
+We will start by assigning families to each pair and ranking families by median
+correlations.
+
+```{r}
+# Load gene family assignments from PLAZA
+fams <- readRDS(here("chapters","gene_families.rds"))
+fams <- fams |> filter(species == "zma")
+```
+
+```{r}
+# Assign families to each pair
+zrho_fams <- zrho_mean |>
+    inner_join(fams |> dplyr::select(dup1 = gene, family)) |>
+    filter(!mean_cor %in% c(Inf, -Inf))
 ```
 
 # 5. Saving objects
