@@ -1,11 +1,11 @@
 ---
-title: "Chapter ?: network-based analysis"
+title: "Chapter 5: network-based analysis"
 author: "Eli Galle"
 date: "`r Sys.Date()`"
 output: html_document
 ---
 
-In this chapter, we will study the patterns of gene expression in paralogs using gene coexpression networks.
+In this chapter, we will study the patterns of gene expression in paralogs using gene coexpression networks. We will test whether any of the duplication modes tends to create genes that are overrepresented in the hubs of the network.
 
 
 Load packages
@@ -18,31 +18,13 @@ library(exdiva) # BiocManager::install("almeidasilvaf/exdiva")
 library(HybridExpress)
 ```
 
-
 For making figures work on hpc
 ```{r}
 options(bitmapType = "cairo")
 ```
 
-Setting aesthetics for figures
+Loading in expression and paralog data from chapter 2
 ```{r}
-# Plot background
-bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
-
-# Define color palette for duplication modes
-dup_pal <- c(
-    SD = "#000000",  
-    TD = "#E69F00",
-    PD = "#56B4E9",
-    rTRD = "#009E73",
-    dTRD = "#F0E442",
-    DD = "#0072B2"
-)
-```
-
-Loading in expression and paralog data and from chapter 2
-```{r}
-#sce <- readRDS(here("chapters", "sce_paralogs.rds"))
 sce <- readRDS(here("chapters", "summarized_sce_paralogs.rds")) 
 dup_info <- readRDS(here("Duplication_data", "duplication_info.rds"))
 dup_genes <- dup_info$genes
@@ -51,7 +33,7 @@ rm(dup_info)
 ```
 
 
-## GCN inference
+## 5.1 GCN inference
 
 GCN inference is done using the package BioNERO. This package implements the WGCNA algorithm. 
 
@@ -93,9 +75,7 @@ sft$plot
 ```
 
 
-
 Infer GCN 
-(Download from hpc)
 ```{r}
 run_gcn = FALSE
 
@@ -111,9 +91,12 @@ if (run_gcn) {
   saveRDS(gcn, "gcn.rds")
 
 } else {
-    gcn <- readRDS(here("chapters", "gcn.rds"))
+  gcn <- readRDS(here("chapters", "gcn.rds"))
 }
 ```
+
+
+## 5.2 Hub genes and duplication mode
 
 Extract hubs; groups of highly co-expressed genes
 ```{r}
@@ -166,7 +149,23 @@ ora_HubsDup
 
 Visualize with plot
 ```{r}
-# reorder the df to the order in the color pallete for the duplication modes
+# Colors for background
+# Plot background
+bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
+
+# Define color palette for duplication modes
+dup_pal <- c(
+    SD = "#000000",  
+    TD = "#E69F00",
+    PD = "#56B4E9",
+    rTRD = "#009E73",
+    dTRD = "#F0E442",
+    DD = "#0072B2"
+)
+```
+
+```{r}
+# Reorder the df to the order in the color pallete for the duplication modes
 ora_HubsDup <- ora_HubsDup[match(names(dup_pal), ora_HubsDup$term),]
 
 figure_ora <- ora_HubsDup %>%
@@ -207,6 +206,8 @@ figure_ora <- ora_HubsDup %>%
 
 figure_ora
 ```
+
+Saving figure
 ```{r}
 ggsave(here("plots_and_figures", "figure_ORA_DupMode_HubGenes.png"), 
        figure_ora,
@@ -215,22 +216,14 @@ ggsave(here("plots_and_figures", "figure_ORA_DupMode_HubGenes.png"),
 ```
 
 
-TODO
+```{r}
+sessionInfo()
+```
 
-scater:plotReducedDim to plot 2 paralogs on the general 
 
-QUESTIONS
-
-Resolved:
-- GCN inference should probably be with expression of every gene (not just the paralogs) --> not necessary
-- metalcells --> seurat package hdWGCNA for metacell or metacells on python (convert rds files with zellkonverter)
-- preprocessing see vignete BioNERO, particularly the PCA_correct (see paper in ?PC_correction) + no prepro in Fabricio paper?
---> filter for low but no PCA_correct
-
-New:
-- sft results
-- why would you have max_setsize in HybridExpress::ora
-
+TODO: 
+- fix assay that is used for network analysis!!!!
+- additional figures
 
   
 
