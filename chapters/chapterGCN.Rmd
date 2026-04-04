@@ -51,19 +51,20 @@ WGCNA::allowWGCNAThreads(nThreads = 36)
 
 GCN inference is done with log normalized counts
 ```{r}
-mat <- sce
+mat <- assay(sce, "logcounts.sum")
 ```
 
-
-We will do some additional preprocessing steps
-- filtering genes that are not (little) expressed
-- adjustment for confounding artifacts
+We filter genes that are not (lowly) expressed
 ```{r}
 mat <- remove_nonexp(mat, method = "median", min_exp=10)
 ```
 mean of 1 also used
 
 Optimal beta value is determined with the function SFT_fit()
+(beta = controls how much you emphasize strong correlations and supress weak ones; correlations are converted by the power of beta)
+
+In general, (biological) networks often display a scale free topology, with many genes being lowly connected and few highly connected. This behavior is often used as quality control of networks and is measured with SFT.R.sq. This value normally increases with beta. An appropriate beta is then selected as the lowest one meeting SFT.R.sq threshold (eg 0.8), while also taking into account the connectivity (don't want it too low).
+
 ```{r}
 sft <- SFT_fit(mat, net_type = "signed hybrid", cor_method = "spearman")
 ```
@@ -74,6 +75,10 @@ sft$power
 sft$plot
 ```
 
+SFT.R.sq and truncated.R.sq are high at lower beta values (3-6). However, the values initially decrease with increasing beta and the slope is positive. This is quite abnormal; the network connectivity follows a power like pattern, but a positive slope means it is in the opposite way (low connectivity is rare and high connectivity is common). Thus, at lower beta the network is very dense, with many nodes having similarly high connectivity
+
+At higher values of beta, the pattern of SFT.R.sq and the sign of slope behave more like expected, but the fit to a scale free topology remains modest (+-0.5). 
+We chose a value of 20 for beta to enforce a biologically meaningful power relation, despite the fit not being optimal.
 
 Infer GCN 
 ```{r}
@@ -135,8 +140,8 @@ dup_genes$type %>%
   prop.table() %>% 
   round(3) * 100 #display as percentage
 ```
-Statistical test of over representation
 
+Statistical test of over representation
 ```{r}
 ora_HubsDup <- HybridExpress::ora(genes = hubs,
     annotation = dup_genes,
