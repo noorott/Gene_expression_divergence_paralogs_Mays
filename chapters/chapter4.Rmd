@@ -38,6 +38,12 @@ dup_pal <- c(
     DD = "#0072B2"
 )
 ```
+
+```{r}
+# Plot background
+bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
+```
+
 Read in the SingleCellExperiment created in chapter1
 
 We need to do metacell aggregation to reduce noise in the data.
@@ -187,6 +193,11 @@ compare_cors <- function(rho_df) {
     return(cld_df)
 }
 ```
+
+```{r, warning= FALSE, message=FALSE}
+comp_cors <- compare_cors(sp_coeff_age)
+```
+
 ```{r}
 # Plot heatmap with CLDs
 p_heatmap_rho <- comp_cors |>
@@ -231,7 +242,6 @@ the spatial transcriptomics study.
 #  pair appears once so this collapses to the pair-level z-rho.)
 zrho_mean <- sp_coeff_age |>
     mutate(
-        cor = signif(cor, 1),
         cor = 0.5 * log((1 + cor) / (1 - cor)),  # Fisher's z-transformation
         pair = str_c(dup1, dup2, sep = "_"),
         species_peak = str_c("zma", peak, sep = "_")
@@ -290,24 +300,19 @@ Here, we explore how gene-gene correlations change over time using $K_s$ as
 a proxy for time. We use Fisher's z-transformed Spearman's $\rho$ and fit
 both a linear (`lm(zrho ~ Ks)`) and a log-linear (`lm(zrho ~ log(Ks))`)
 model to determine which better describes the relationship.
-
 ```{r}
-# Get mean rho for all duplicates, filtered to Ks < 3
+# Get Fisher's Z-transformed rho for all duplicates, filtered to Ks < 3
 mean_rho_zma <- sp_coeff_age |>
     filter(Ks < 3) |>
     mutate(
-        cor = signif(cor, 1),
         cor = 0.5 * log((1 + cor) / (1 - cor)),
         pair = str_c(dup1, dup2, sep = "_")
     ) |>
-    group_by(pair) |>
-    mutate(mean_cor = mean(cor, na.rm = TRUE)) |>
-    ungroup() |>
     distinct(pair, .keep_all = TRUE) |>
     mutate(
         type = factor(type, levels = names(dup_pal))
     ) |>
-    dplyr::select(zrho = mean_cor, Ks, Ka, type) |>
+    dplyr::select(zrho = cor, Ks, Ka, type) |>
     filter(!zrho %in% c(Inf, -Inf), !is.na(zrho))
 ```
 
@@ -391,6 +396,49 @@ zrho_fams <- zrho_mean |>
     inner_join(fams |> dplyr::select(dup1 = gene, family)) |>
     filter(!mean_cor %in% c(Inf, -Inf))
 ```
+```{r}
+# Get Q1, Q3, median, and rank families by median
+fams_ranked <- zrho_fams |>
+    group_by(family) |>
+    summarise(
+        q1 = quantile(mean_cor, 0.25, na.rm = TRUE),
+        median = quantile(mean_cor, 0.5, na.rm = TRUE),
+        q3 = quantile(mean_cor, 0.75, na.rm = TRUE)
+    ) |>
+    arrange(-median) |>
+    mutate(family = factor(family, levels = family)) |>
+    ungroup()
+```
+
+Next, we will visualize distributions of correlations for each family
+using boxplots. We will use median correlations calculated above to sort
+boxes from highest to lowest correlation.
+
+```{r}
+# Visualize IQRs of correlations per family
+p_zrho_fam <- fams_ranked |>
+    ggplot(aes(x = family)) +
+    geom_linerange(
+        aes(ymin = q1, ymax = q3),
+        color = "gray20"
+    ) +
+    geom_point(aes(y = median), color = "firebrick", size = 0.5) +
+    coord_cartesian(ylim = c(-0.2, 1.5)) +
+    theme_classic() +
+    theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.background = element_rect(fill = bg)
+    ) +
+    labs(
+        title = "Gene-gene correlations for each gene family",
+        subtitle = "Families are ranked by median values (red dots)",
+        x = "Ranked gene families",
+        y = expression("IQR of Fisher's z-transformed" ~ rho)
+    )
+
+p_zrho_fam
+```
 
 # 5. Saving objects
 
@@ -411,6 +459,12 @@ ggsave(
 ggsave(
     filename = here("plots_and_figures", "expression_divergence_over_time_zma.png"),
     plot     = p_rho_ks_zma,
+    width    = 9, height = 4, dpi = 300
+)
+
+ggsave(
+    filename = here("plots_and_figures", "correlation_per_gene_family.png"),
+    plot     = p_zrho_fam,
     width    = 9, height = 4, dpi = 300
 )
 ```
