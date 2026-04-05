@@ -14,40 +14,458 @@ pairs using different metrics to investigate if there is biased divergence
 depending on the duplication mechanisms. 
 
 First load required packages:
-```{r}
+```{r, warning=FALSE, message=FALSE}
 library(exdiva)
 library(SingleCellExperiment)
 library(SuperCell)
+library(SummarizedExperiment)
+library(here)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(stringr)
+library(purrr)
 ```
 
-
-Read in the SingleCellExperiment created in chapter1:
 ```{r}
-sce <- readRDS("sce_paralogs.rds ")
-```
-
-
-We need to do metacell aggregation to reduce noise in the data.
-We do this using the SuperCell package
-
-Create the metacells
-```{r}
-sc <- SCimplify(
-  X = assay(sce, 'logcounts'),
-  gamma = 30,  # proportion of number of single cells in the initial dataset to the number of metacells in the final dataset
+# Define color palette for duplication modes
+dup_pal <- c(
+    SD = "#000000",  
+    TD = "#E69F00",
+    PD = "#56B4E9",
+    rTRD = "#009E73",
+    dTRD = "#F0E442",
+    DD = "#0072B2"
 )
 ```
-sc$membership gives the metacell ID for each cell
 
 ```{r}
-metacell_counts <- supercell_GE(
-  ge = assay(sce, "counts"),
+# Plot background
+bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
+```
+
+Read in the SingleCellExperiment created in chapter1
+
+We need to do metacell aggregation to reduce noise in the data.
+We do this using the SuperCell package.
+
+# 1 Create the metacells
+
+! You only have to run this once, if you already created the metacell_sce.rds file: go to 2
+
+```{r}
+sce <- readRDS(here("chapters", "sce_paralogs.rds"))
+```
+
+```{r}
+sc <- SCimplify(
+   X = assay(sce, "logcounts"),
+   gamma = 30,
+   cell.annotation = colData(sce)$Celltype_Organ
+)
+```
+
+```{r}
+length(sc$membership)
+max(sc$membership)
+```
+We have aggregated 228 359 singlecells into 18 196 metacells
+
+```{r}
+metacell_logcounts <- supercell_GE(
+  ge = assay(sce, "logcounts"),
   groups = sc$membership,
   mode = "sum"
 )
-
+  
 metacell_sce <- SingleCellExperiment(
-  assays = list(counts = metacell_counts)
+  assays = list(logcounts = metacell_logcounts)
+)
+colData(metacell_sce)$celltype <- sc$SC.cell.annotation. ## Add annotation celltype_organ to the metacells
+```
+
+```{r}
+saveRDS(metacell_sce, here("chapters", "metacell_sce.rds"))
+```
+
+# 2. Comparing distributions of gene-gene correlations by duplication mode
+
+read in the metacells
+```{r}
+metacell_sce <- readRDS(here("chapters", "metacell_sce.rds"))
+```
+
+```{r}
+paralog_pairs <- readRDS(here("Duplication_data", "duplication_info_filtered.rds"))
+
+paralog_pairs$pairs %>%
+     distinct(peak_name)
+```
+Filter out paralogue pairs with peak_name is NA
+```{r}
+paralog_pairs$pairs <- paralog_pairs$pairs[!is.na(paralog_pairs$pairs$peak_name), ]
+```
+
+
+```{r}
+# Create a dataframe containing only the duplicated pairs and their type
+dups <- as.data.frame(paralog_pairs$pairs[, c("dup1", "dup2", "type")])
+
+# calculate the Spearman's correlation coëfficiënt using the exdiva package
+se_simple <- SummarizedExperiment(
+  assays = list(logcounts = as.matrix(logcounts(metacell_sce)))
+)
+
+sp_coeff <- calculate_cor(
+  se = se_simple,
+  dups = dups,
+  assay_name = "logcounts",
+  method = "spearman"
+)
+```
+
+Remove pairs where correlation is NA
+```{r}
+sp_coeff <- sp_coeff %>%
+     filter(!is.na(cor))
+```
+
+
+Next, for each sample, we will test for significant differences by 
+duplication mode using Kruskal-Wallis tests followed by a post-hoc Dunn's test. 
+To account for differences in ages between gene pairs, we will do this 
+separately for each age group.
+
+```{r}
+# Ad all info to the correlation dataframe
+sp_coeff_age <- dplyr::inner_join(paralog_pairs$pairs, sp_coeff, by = c("dup1", "dup2", "type")) 
+# Type can be added as an innerjoin key bc they will always be the same
+# This way we will only have 1 type column in the result
+```
+
+
+
+```{r}
+# Credits to Fabricio Almeida Silva 
+# Compare distros
+#' Wrapper function to compare distros with Kruskal-Wallis + Dunn
+cld_kw_dunn <- function(df, var = "type", value = "csum") {
+    
+    # Perform Kruskal-Wallis test followed by a post-hoc Dunn's test
+    dunn <- FSA::dunnTest(
+        df[[value]] ~ df[[var]], method = "bh"
+    ) |>
+        purrr::pluck("res") |>
+        arrange(Z)
+    
+    # Get compact letter display (CLD)
+    cld <- rcompanion::cldList(
+        comparison = dunn$Comparison,
+        p.value = dunn$P.adj,
+        threshold = 0.05
+    )
+    
+    return(cld)
+}
+
+compare_cors <- function(rho_df) {
+    
+    # Add a variable indicating sample + Ks peak
+    rho_df$id <- paste0(rho_df$sample, "_", rho_df$peak)
+    ids <- unique(rho_df$id)
+    
+    # Perform tests and get CLD for each sample-peak
+    cld_df <- Reduce(rbind, lapply(ids, function(x) {
+        
+        fdf <- rho_df[rho_df$id == x, ]
+        
+        # Perform Kruskal-Wallis test followed by a post-hoc Dunn's test
+        cld <- cld_kw_dunn(fdf, value = "cor")
+        cld$sample <- unique(fdf$sample)
+        cld$peak <- unique(fdf$peak)
+        cld$peak_name <- unique(fdf$peak_name)
+        
+        return(cld)
+    }))
+    
+    
+    
+    return(cld_df)
+}
+```
+
+```{r, warning= FALSE, message=FALSE}
+comp_cors <- compare_cors(sp_coeff_age)
+```
+
+```{r}
+# Plot heatmap with CLDs
+p_heatmap_rho <- comp_cors |>
+    mutate(Group = factor(Group, levels = rev(names(dup_pal)))) |>
+    ggplot(aes(x = peak_name, y = Group, fill = Letter)) +
+    geom_tile(color = "gray90", linewidth = 0.8, alpha = 0.7) +
+    geom_text(aes(label = Letter), size = 3) +
+    ggh4x::facet_nested(~ peak_name, scales = "free", space = "free") +
+    theme_classic() +
+    theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
+    ) +
+    labs(
+        title = "Differences in gene-gene correlations by duplication mode",
+        subtitle = "CLD from Kruskal-Wallis + post-hoc Dunn's test; P <0.05",
+        x = "Peak", y = "Mode"
+    ) +
+    theme(
+        legend.position = "none"
+    ) +
+    ggsci::scale_fill_npg()
+
+p_heatmap_rho
+```
+POAC WGD: happened ∼53 MYA
+ZEAM WGD: happened ∼16 MYA 
+
+Older duplicates consistently display lower expression divergence, in line with findings from previous studies. Duplication mode also plays a clear role: in maize, paralogs show the greatest expression divergence among recent duplicates, for example in SD, TD, and dTRD. This contrasts with previous work, where duplication modes that preserve cis-regulatory landscapes — such as WGD and TRD — were associated with lower expression divergence compared to modes that disrupt them.
+
+# 3. Mean Fisher's z-transformed rho across the dataset
+
+Since we have a single metacell dataset (no multiple slides to average over),
+we compute the Fisher's z-transformed rho per pair and visualise the
+distribution by duplication mode — analogous to the `zrho_mean` analysis in
+the spatial transcriptomics study.
+
+
+```{r}
+# Get mean Fisher's Z-transformed rho estimates
+# (Here "mean" is over duplicate entries of the same pair; in practice each
+#  pair appears once so this collapses to the pair-level z-rho.)
+zrho_mean <- sp_coeff_age |>
+    mutate(
+        cor = 0.5 * log((1 + cor) / (1 - cor)),  # Fisher's z-transformation
+        pair = str_c(dup1, dup2, sep = "_"),
+        species_peak = str_c("zma", peak, sep = "_")
+    ) |>
+    group_by(pair, peak) |>
+    mutate(mean_cor = mean(cor)) |>
+    ungroup() |>
+    distinct(pair, peak, .keep_all = TRUE) |>
+    mutate(
+        type = factor(type, levels = names(dup_pal)),
+        peak = as.character(peak)
+    ) |>
+    dplyr::select(-c(cor, pair))
+
+# Compare distributions using the same KW + Dunn approach
+zrho_cld <- lapply(
+    split(zrho_mean, zrho_mean$species_peak),
+    cld_kw_dunn, var = "type", value = "mean_cor"
+) |>
+    bind_rows(.id = "species_peak") |>
+    tidyr::separate(species_peak, c("sp", "peak"), sep = "_") |>
+    dplyr::rename(type = Group) |>
+    mutate(
+        type = factor(type, levels = names(dup_pal)),
+        peak = as.character(peak)
+    ) |>
+    left_join(zrho_mean |> dplyr::select(peak, peak_name) |> distinct())
+
+# Plot distributions with CLDs
+p_zrho_mean <- zrho_mean |>
+    filter(mean_cor != Inf, !is.na(mean_cor)) |>
+    ggplot(aes(x = mean_cor, y = type)) +
+    geom_violin(aes(fill = type), scale = "width", show.legend = FALSE) +
+    scale_fill_manual(values = dup_pal) +
+    geom_boxplot(width = 0.1, outlier.color = "gray60", outlier.alpha = 0.5) +
+    geom_label(
+        data = zrho_cld,
+        aes(x = 0.8, y = type, label = Letter)
+    ) +
+    ggh4x::facet_nested(~ peak_name, scales = "free", space = "free") +
+    labs(
+        x = expression("Fisher's z-transformed" ~ rho), 
+        y = NULL,
+        title = "Gene-gene correlations and duplication mode",
+        subtitle = "CLD from Kruskal-Wallis + post-hoc Dunn's test; P <0.05"
+    ) +
+    scale_x_continuous(limits = c(-0.5, 1)) +
+    theme_classic()
+
+p_zrho_mean
+```
+
+# 4. Expression divergence over time
+
+Here, we explore how gene-gene correlations change over time using $K_s$ as
+a proxy for time. We use Fisher's z-transformed Spearman's $\rho$ and fit
+both a linear (`lm(zrho ~ Ks)`) and a log-linear (`lm(zrho ~ log(Ks))`)
+model to determine which better describes the relationship.
+```{r}
+# Get Fisher's Z-transformed rho for all duplicates, filtered to Ks < 3
+mean_rho_zma <- sp_coeff_age |>
+    filter(Ks < 3) |>
+    mutate(
+        cor = 0.5 * log((1 + cor) / (1 - cor)),
+        pair = str_c(dup1, dup2, sep = "_")
+    ) |>
+    distinct(pair, .keep_all = TRUE) |>
+    mutate(
+        type = factor(type, levels = names(dup_pal))
+    ) |>
+    dplyr::select(zrho = cor, Ks, Ka, type) |>
+    filter(!zrho %in% c(Inf, -Inf), !is.na(zrho))
+```
+
+```{r}
+# Compare linear vs log-linear models per duplication mode
+dmodes <- c("SD", "TD", "PD", "rTRD", "dTRD", "DD")
+
+model_comp_zma <- Reduce(rbind, lapply(dmodes, function(y) {
+    
+    df_mode <- mean_rho_zma |>
+        filter(type == y) |>
+        mutate(logks = log(Ks))
+    
+    if (nrow(df_mode) < 5) return(NULL)  # skip modes with too few pairs
+    
+    m1 <- lm(zrho ~ Ks,    data = df_mode)
+    m2 <- lm(zrho ~ logks, data = df_mode)
+    
+    data.frame(
+        BIC1  = BIC(m1, m2)$BIC[1],
+        BIC2  = BIC(m1, m2)$BIC[2],
+        AIC1  = AIC(m1, m2)$AIC[1],
+        AIC2  = AIC(m1, m2)$AIC[2],
+        Rsq1  = summary(m1)$r.squared,
+        Rsq2  = summary(m2)$r.squared,
+        type  = y
+    ) |>
+        mutate(
+            best_BIC = ifelse(BIC1 < BIC2, "linear", "log-linear"),
+            best_AIC = ifelse(AIC1 < AIC2, "linear", "log-linear")
+        )
+}))
+
+model_comp_zma
+```
+
+```{r}
+# Scatterplot: z-rho ~ log(Ks) with linear trend per duplication mode
+p_rho_ks_zma <- mean_rho_zma |>
+    filter(!is.na(type)) |>
+    mutate(logks = log(Ks)) |>
+    ggplot(aes(x = logks, y = zrho)) +
+    geom_point(aes(color = type), alpha = 0.4) +
+    scale_color_manual(values = dup_pal) +
+    geom_smooth(method = "lm", color = "firebrick3", se = TRUE) +
+    ggpubr::stat_regline_equation(
+        aes(label = ..eq.label..),
+        label.x = -3.5, label.y = 2.5, size = 3
+    ) +
+    facet_wrap(~ type, nrow = 1) +
+    coord_cartesian(ylim = c(-1, 3)) +
+    scale_x_continuous(limits = c(-4, 1.1)) +
+    theme_classic() +
+    theme(legend.position = "none") +
+    labs(
+        title = "Expression divergence over time — Z. mays (single-cell metacells)",
+        x = expression(log ~ K[s]),
+        y = expression("Fisher's z-transformed" ~ rho)
+    )
+
+p_rho_ks_zma
+```
+
+## Expression divergence by gene family
+
+Here, we will explore how duplicates in each gene family diverge, looking
+for families that tend to have more similar expression profiles (i.e., less
+divergence), and families with more divergent expression profiles.
+We will start by assigning families to each pair and ranking families by median
+correlations.
+
+```{r}
+# Load gene family assignments from PLAZA
+fams <- readRDS(here("chapters","gene_families.rds"))
+fams <- fams |> filter(species == "zma")
+```
+
+```{r}
+# Assign families to each pair
+zrho_fams <- zrho_mean |>
+    inner_join(fams |> dplyr::select(dup1 = gene, family)) |>
+    filter(!mean_cor %in% c(Inf, -Inf))
+```
+```{r}
+# Get Q1, Q3, median, and rank families by median
+fams_ranked <- zrho_fams |>
+    group_by(family) |>
+    summarise(
+        q1 = quantile(mean_cor, 0.25, na.rm = TRUE),
+        median = quantile(mean_cor, 0.5, na.rm = TRUE),
+        q3 = quantile(mean_cor, 0.75, na.rm = TRUE)
+    ) |>
+    arrange(-median) |>
+    mutate(family = factor(family, levels = family)) |>
+    ungroup()
+```
+
+Next, we will visualize distributions of correlations for each family
+using boxplots. We will use median correlations calculated above to sort
+boxes from highest to lowest correlation.
+
+```{r}
+# Visualize IQRs of correlations per family
+p_zrho_fam <- fams_ranked |>
+    ggplot(aes(x = family)) +
+    geom_linerange(
+        aes(ymin = q1, ymax = q3),
+        color = "gray20"
+    ) +
+    geom_point(aes(y = median), color = "firebrick", size = 0.5) +
+    coord_cartesian(ylim = c(-0.2, 1.5)) +
+    theme_classic() +
+    theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.background = element_rect(fill = bg)
+    ) +
+    labs(
+        title = "Gene-gene correlations for each gene family",
+        subtitle = "Families are ranked by median values (red dots)",
+        x = "Ranked gene families",
+        y = expression("IQR of Fisher's z-transformed" ~ rho)
+    )
+
+p_zrho_fam
+```
+
+# 5. Saving objects
+
+```{r}
+# Save plots as PNG
+ggsave(
+    filename = here("plots_and_figures", "heatmap_rho_cld_zma.png"),
+    plot     = p_heatmap_rho,
+    width    = 9, height = 3, dpi = 300
+)
+
+ggsave(
+    filename = here("plots_and_figures", "zrho_mean_by_dupmode_zma.png"),
+    plot     = p_zrho_mean,
+    width    = 8, height = 3, dpi = 300
+)
+
+ggsave(
+    filename = here("plots_and_figures", "expression_divergence_over_time_zma.png"),
+    plot     = p_rho_ks_zma,
+    width    = 9, height = 4, dpi = 300
+)
+
+ggsave(
+    filename = here("plots_and_figures", "correlation_per_gene_family.png"),
+    plot     = p_zrho_fam,
+    width    = 9, height = 4, dpi = 300
 )
 ```
 
