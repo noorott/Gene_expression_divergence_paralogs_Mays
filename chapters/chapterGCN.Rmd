@@ -5,7 +5,7 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
-In this chapter, we will study the patterns of gene expression in paralogs using gene coexpression networks. We will test whether any of the duplication modes tends to create genes that are overrepresented in the hubs of the network.
+In this chapter, we will study the patterns of gene expression in paralogs using gene coexpression networks. We will test whether any of the duplication modes tends to create genes that are overrepresented in the network hubs.
 
 
 Load packages
@@ -23,7 +23,7 @@ For making figures work on hpc
 options(bitmapType = "cairo")
 ```
 
-Loading in expression and paralog data from chapter 2
+Loading in expression and paralog data from chapter 2. Coexpression network will be constructed using pseudobulked expression data to avoid problems with sparse expression.
 ```{r}
 sce <- readRDS(here("chapters", "summarized_sce_paralogs.rds")) 
 dup_info <- readRDS(here("Duplication_data", "duplication_info.rds"))
@@ -224,15 +224,4 @@ ggsave(here("plots_and_figures", "figure_ORA_DupMode_HubGenes.png"),
 ```{r}
 sessionInfo()
 ```
-
-
-TODO: 
-- fix assay that is used for network analysis!!!!
-- additional figures
-
-  
-
-
-
-
 
