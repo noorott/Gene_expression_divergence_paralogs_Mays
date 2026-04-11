@@ -13,6 +13,7 @@ library(tidyr)
 library(Matrix)
 library(here)
 library(ggplot2)
+library(patchwork)
 ```
 
 ## Frequency of genes in each divergence class originating from each duplication mode
@@ -54,7 +55,7 @@ genes_metacells
 I still need to check if the genes in metacells are the ones before or after the duplication, but this is easily adjusted by changing which column you call gene in this chunk of code. --> solved by making the object for both duplicates. 
 ```{r}
 duplication_modes_step <- duplication_modes |>
-  mutate(gene = dup2)
+  mutate(gene = dup2) #I used dup2 because i think the genes in metacells are also the genes after the duplication? 
 duplication_modes_step
 metacells_duplication_mode <- inner_join(duplication_modes_step, 
                                          genes_metacells, 
@@ -69,9 +70,7 @@ Now we have to filter for the genes that were actually expressed. The data is st
 ```{r}
 head(assay(metacells))
 ```
-We want to make a dataframe containing the next columns:
-- gene
-- cell, this way we can match it to the coldata of metacells to obtain the celltypes to get the dataframe we want. This one will contain dup1, dup2 and duplication mode (what is already in there) and the tissue in which the specific gene (gene2) is expressed. 
+Next, we make a dataframe containing the celltype and the cell_id, this way we can match the celltype with the actually expressed genes, to have the dataframe we want, containing; dup1, dup2, duplication mode and celltype. 
 ```{r}
 coldata_metacells$cell_idx <- 1:nrow(coldata_metacells)
 coldata_metacells
@@ -137,7 +136,7 @@ if (FALSE) {
 }
 ```
 
-Now, we need to make the same dataframe for each gene apart, to be able to calculate the REB. We start from the second table from the first chunk of code. We want to add the duplication mode and the celltype. Here I assume that the dup1 is also expressed in the place where dup2 is expressed? I do not know how I would need to account for the expression location of dup1 otherwise? 
+Now we need to make the same dataframe for the genes within the duplicate pair. I made the assumption that dup1 is also expressed in the place where dup2 is expressed? I do not know how I would need to account for the expression location of dup1 otherwise? 
 
 ```{r}
 dup_pairs <- dup_pairs_wide |>
@@ -221,6 +220,7 @@ Now that we have the table we need, we can start to make the plot. Let's take a 
 ```{r}
 reb
 ```
+Before making the plot, we will need to look at the association between the duplication mode and the divergence class. To determine if there is a significant link between both of them, we conduct a chi-squared test and calculate the p-values. 
 
 ```{r}
 plot_data <- reb |>
@@ -228,27 +228,23 @@ plot_data <- reb |>
   group_by(divergence_class, type) |>
   summarise(N = n(), .groups = "drop")
 
-# Make a table counting how many observations per divergence class in each duplication mode
 div_type_counts <- reb |>
   filter(!is.na(divergence_class)) |>
   count(divergence_class, type)
 
-# Chi-squared test per cel
 expected <- chisq.test(xtabs(n ~ divergence_class + type, data = div_type_counts))
 
-# Calculate the p-values
 residuals_df <- as.data.frame(expected$stdres) |>
   rename(divergence_class = divergence_class, type = type, stdres = Freq) |>
   mutate(significant = abs(stdres) > 1.96) # p < 0.05
 
-# Add to plotdata
 plot_data <- div_type_counts |>
   left_join(residuals_df, by = c("divergence_class", "type")) |>
   mutate(
     divergence_class = factor(divergence_class, 
-                              levels = c("Asymmetric divergence", 
+                              levels = c("Redundancy", 
                                          "Symmetric divergence", 
-                                         "Redundancy")),
+                                         "Asymmetric divergence")),
     type = factor(type, 
                   levels = c("SD", 
                              "TD", 
@@ -265,7 +261,7 @@ plot <- ggplot(plot_data, aes(x = type, y = divergence_class, fill = log10(n))) 
             color = "black", size = 5) +
   scale_fill_gradient(low = "white", high = "darkgreen", name = "Log10 N") +
   labs(
-    title = "Expression divergence pattern and duplication mode",
+    title = "Expression divergence pattern and duplication mode: Zea mays",
     x = "Duplication mode",
     y = "Divergence class"
   ) +
@@ -278,9 +274,60 @@ if (FALSE){ggsave("../plots_and_figures/divergence_duplication_heatmap.png",
        height = 4, 
        dpi = 300)}
 ```
+Because it is easy to make and the data is ready, we will be making another plot too, this may help in the interpretation and conclusion. 
+
+```{r}
+p_density <- reb |>
+  filter(!is.na(divergence_class)) |>
+  mutate(type = factor(type, levels = c("SD", "TD", "PD", "rTRD", "dTRD", "DD"))) |>
+  ggplot(aes(x = REB_dup1, y = REB_dup2)) +
+  stat_density_2d(aes(fill = after_stat(density)), 
+                  geom = "raster", 
+                  contour = FALSE) +
+  scale_fill_gradient(low = "white", high = "darkblue", name = "Density") +
+  facet_wrap(~ type, nrow = 1) +
+  labs(
+    title = "Relative expression breadth of paralogs",
+    subtitle = "Scatterplots are represented by their smoothed densities",
+    x = "REB of gene 1",
+    y = "REB of gene 2"
+  ) +
+  scale_x_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1)) +
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1)) +
+  theme_bw() +
+  theme(panel.spacing = unit(0.2, "lines")) +
+  theme(panel.spacing = unit(1.5, "lines"),  # verder uit elkaar
+        aspect.ratio = 0.95)                  # rechthoek met langste basis
+
+p_density
+
+if (FALSE) {ggsave("../plots_and_figures/reb_density_scatterplot.png",
+       plot = p_density,
+       width = 12,
+       height = 3,
+       dpi = 300)}
+```
+```{r}
+combined_plot <- p_density / plot + 
+  plot_annotation(tag_levels = "A") +
+  plot_layout(heights = c(2, 3))
+
+combined_plot
+
+ggsave("../plots_and_figures/combined_plot.png",
+       plot = combined_plot,
+       width = 24,
+       height = 20,
+       dpi = 300)
+```
+
 #Interpretation and conclusion
 
+Plot A shows that the majority of gene pairs have a high REB for both genes, clustering in the upper right corner across all duplication modes. This indicates that broad expression across many cell types is the most common outcome for duplicate gene pairs in Zea mays, suggesting that complete redundancy is still the predominant state for most duplicates.
 
+Plot B reveals a significant association between duplication mode and divergence class, indicating that the mode of duplication influences the direction of expression divergence. Redundancy is the most frequently observed class across all duplication modes, consistent with the patterns observed in plot A. However, the strength of association varies considerably between duplication modes. SD and DD show the strongest associations with specific divergence classes, suggesting that these duplication modes more strongly direct duplicate gene pairs towards a particular divergence outcome. In contrast, rTRD shows no significant associations with any divergence class, suggesting that this duplication mode has a more neutral effect on the direction of expression divergence.
+
+Overall, these results indicate that while redundancy remains the most common outcome for duplicate gene pairs in Zea mays, the evolutionary trajectory a gene pair follows is not entirely random but is partly determined by the mechanism of duplication. This suggests that the genomic context and molecular mechanisms underlying each duplication mode play a role in shaping the subsequent functional divergence of duplicate genes.
 
 
 
