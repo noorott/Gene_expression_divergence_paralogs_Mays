@@ -1,44 +1,227 @@
 ---
-title: "Chapter_5"
-author: "Emmeline Van Rijswijck"
+title: "Chapter 5: network-based analysis"
+author: "Eli Galle"
 date: "`r Sys.Date()`"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+In this chapter, we will study the patterns of gene expression in paralogs using gene coexpression networks. We will test whether any of the duplication modes tends to create genes that are overrepresented in the network hubs.
+
+
+Load packages
+```{r setup, message=FALSE, warning=FALSE}
+library(SingleCellExperiment)
+library(tidyverse)
+library(here)
+library(BioNERO) # BiocManager::install("almeidasilvaf/BioNERO")
+library(exdiva) # BiocManager::install("almeidasilvaf/exdiva")
+library(HybridExpress)
 ```
 
-## Frequency of genes in each divergence class originating from each duplication mode
+For making figures work on hpc
+```{r}
+options(bitmapType = "cairo")
+```
 
-We will start from the data obtained in chapter 2; duplication_info_filtered (and summarized_sce_paralogs)
+Loading in expression and paralog data from chapter 2. Coexpression network will be constructed using pseudobulked expression data to avoid problems with sparse expression.
+```{r}
+sce <- readRDS(here("chapters", "summarized_sce_paralogs.rds")) 
+dup_info <- readRDS(here("Duplication_data", "duplication_info.rds"))
+dup_genes <- dup_info$genes
+dup_pairs <- dup_info$pairs
+rm(dup_info)
+```
 
-# Reading in the data
+
+## 5.1 GCN inference
+
+GCN inference is done using the package BioNERO. This package implements the WGCNA algorithm. 
+
+Expression values are transformed into a pairwise similarities, calculated based on the pairwise gene correlations. An unsigned method treats negative correlations the same as positive by taking the absolute value. In a signed method the transformation is constructed a little different to only pick up on positive correlations.
+
+Next, the similarity matrix is raised to a power beta to define the adjacency matrix. This is done to amplify distances. Values close to 1 will change relatively little while lower values will decrease. Using a higher beta results in a more scale-free topology (= most nodes have little edges, selected amount of a lot; desired characteristic in biological network). However, it also reduces mean connectivity.
+
+The resulting network can then be analyzed using clustering methods to identify modules of genes that are adjacent.
 
 ```{r}
-duplication_info_filtered <- readRDS("../Duplication_data/duplication_info_filtered.rds")
-duplication_info_filtered$genes
+# to speed up calculations
+# change nThreads depending on how many you have (parallel::detectCores())
+WGCNA::allowWGCNAThreads(nThreads = 36)
 ```
 
-# Calculate the relative expression breadth
+GCN inference is done with log normalized counts
+```{r}
+mat <- assay(sce, "logcounts.sum")
+```
 
-The relative expression breadth REBA for gene A is defined as the proportion of cell types in which gene A is expressed relative to the total number of cell types in which either gene A or gene B is expressed.
+We filter genes that are not (lowly) expressed
+```{r}
+mat <- remove_nonexp(mat, method = "median", min_exp=10)
+```
+mean of 1 also used
 
-To calculate relative expression breadth, a dataset is required that indicates which genes are expressed in which cell types, typically represented as a matrix where each gene is scored for expression across all analyzed cell types; the breadth is then computed as the fraction of cell types in which a gene is expressed.
+Optimal beta value is determined with the function SFT_fit()
+(beta = controls how much you emphasize strong correlations and supress weak ones; correlations are converted by the power of beta)
 
-Let's construct a matrix containing the following variables:
-- Gene 
-- Duplication mode
-- Location of expression 
-
-Metacells are used to reduce technical noise and dropout effects inherent to single-cell RNA sequencing data by aggregating transcriptionally similar cells, resulting in more robust expression profiles that allow a more reliable estimation of gene expression breadth across cell types.
+In general, (biological) networks often display a scale free topology, with many genes being lowly connected and few highly connected. This behavior is often used as quality control of networks and is measured with SFT.R.sq. This value normally increases with beta. An appropriate beta is then selected as the lowest one meeting SFT.R.sq threshold (eg 0.8), while also taking into account the connectivity (don't want it too low).
 
 ```{r}
-metacells <- readRDS('../Chapters/metacells.rds')
-names(assay(metacells))
+sft <- SFT_fit(mat, net_type = "signed hybrid", cor_method = "spearman")
 ```
-#tissue_organ gebruiken!!! niet celltype!!!!!!! ale dus om REB te berekenen 
+
+Take a look at results
+```{r}
+sft$power
+sft$plot
+```
+
+SFT.R.sq and truncated.R.sq are high at lower beta values (3-6). However, the values initially decrease with increasing beta and the slope is positive. This is quite abnormal; the network connectivity follows a power like pattern, but a positive slope means it is in the opposite way (low connectivity is rare and high connectivity is common). Thus, at lower beta the network is very dense, with many nodes having similarly high connectivity
+
+At higher values of beta, the pattern of SFT.R.sq and the sign of slope behave more like expected, but the fit to a scale free topology remains modest (+-0.5). 
+We chose a value of 20 for beta to enforce a biologically meaningful power relation, despite the fit not being optimal.
+
+Infer GCN 
+```{r}
+run_gcn = FALSE
+
+if (run_gcn) {
+    gcn <- exp2gcn(
+    mat,
+    net_type = "signed hybrid", # hybrid: sim = cor if cor>0 else 0
+    SFTpower = 20,       
+    cor_method = "spearman",   
+    return_cormat = FALSE,      # whether you want the correlation matrix
+    verbose = TRUE
+  )
+  saveRDS(gcn, "gcn.rds")
+
+} else {
+  gcn <- readRDS(here("chapters", "gcn.rds"))
+}
+```
 
 
+## 5.2 Hub genes and duplication mode
 
+Extract hubs; groups of highly co-expressed genes
+```{r}
+# Extract hubs,
+final_df <- cbind(gcn$genes_and_modules, gcn$kIN) |>
+  filter(Modules != "grey") # grey module is the trash bin module
+
+# split in tables for each module; want every module in the gcn to be represented
+# get top 10% 
+hubs <- lapply(split(final_df, final_df$Modules), function(x) {
+  hubs_vec <- x %>%
+    arrange(-kWithin) %>%
+    slice_head(n = round(nrow(x) * 0.1)) %>%
+    pull(Genes)
+  
+  return(hubs_vec)
+  }
+)
+
+# converting list with hub genes for each module into vector of all hub genes
+# don't need to know from which module they were, so unname
+hubs <- unname(unlist(hubs))
+```
+
+Summarize number of (paralog) hub genes per duplication mode, compare with background frequency.
+```{r}
+# count number of (paralog) hub genes per duplication mode
+dup_genes[dup_genes$gene %in% hubs, ]$type %>% 
+  table() %>%
+  prop.table() %>% 
+  round(3) * 100 #display as percentage
+
+# count number of (paralog) genes per duplication mode (=background frequency)
+dup_genes$type %>% 
+  table() %>% 
+  prop.table() %>% 
+  round(3) * 100 #display as percentage
+```
+
+Statistical test of over representation
+```{r}
+ora_HubsDup <- HybridExpress::ora(genes = hubs,
+    annotation = dup_genes,
+    background = dup_genes$gene,
+    max_setsize = 100000,
+    alpha = 1 # want all p-values for plot
+  )
+ora_HubsDup
+```
+
+Visualize with plot
+```{r}
+# Colors for background
+# Plot background
+bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
+
+# Define color palette for duplication modes
+dup_pal <- c(
+    SD = "#000000",  
+    TD = "#E69F00",
+    PD = "#56B4E9",
+    rTRD = "#009E73",
+    dTRD = "#F0E442",
+    DD = "#0072B2"
+)
+```
+
+```{r}
+# Reorder the df to the order in the color pallete for the duplication modes
+ora_HubsDup <- ora_HubsDup[match(names(dup_pal), ora_HubsDup$term),]
+
+figure_ora <- ora_HubsDup %>%
+  mutate(
+    term = factor(term, levels = c("SD",
+                                   "TD",
+                                   "PD",
+                                   "rTRD",
+                                   "dTRD",
+                                   "DD")),
+    logP = -log10(padj),
+    significant = ifelse(padj < 0.05, TRUE, FALSE),
+    symbol = case_when(
+      padj <= 0.05 & padj > 0.01 ~ "*",
+      padj <= 0.01 & padj > 0.001 ~ "**",
+      padj <= 0.001 ~ "***",
+      TRUE ~ ""
+    )
+  ) %>% 
+  ggplot(aes(x=genes, y=term)) +
+    geom_point(
+      aes(fill=term, size = logP, alpha = significant),
+      color = "gray20", pch = 21
+    ) +
+    scale_size(range = c(4, 9)) +
+    scale_alpha_manual(values = c(0.3, 1)) +
+    scale_fill_manual(values = dup_pal) +
+    geom_text(aes(label = symbol), vjust = -0.5, size = 5) +
+    scale_x_continuous(limits = c(0, 900)) +
+    theme_classic() +
+    guides(fill = "none", alpha = "none") +
+    labs(
+        title = "Duplication mode of hub genes in coexpression networks",
+        subtitle = "Bright dots with asterisks indicate significant overrepresentation; P <0.05",
+        x = "Number of hub genes", y = NULL,
+        size = expression(-Log[10] ~ italic(P))
+    )
+
+figure_ora
+```
+
+Saving figure
+```{r}
+ggsave(here("plots_and_figures", "figure_ORA_DupMode_HubGenes.png"), 
+       figure_ora,
+       width = 6,
+       height = 5)
+```
+
+
+```{r}
+sessionInfo()
+```
 

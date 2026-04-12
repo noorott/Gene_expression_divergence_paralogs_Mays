@@ -195,10 +195,19 @@ compare_cors <- function(rho_df) {
 ```
 
 ```{r, warning= FALSE, message=FALSE}
-comp_cors <- compare_cors(sp_coeff_age)
+library('FSA')
+comp_cors <- compare_cors(sp_coeff_age) |> mutate(species = "Zma")
 ```
 
 ```{r}
+# we add a dummy "sample" column so that the downstream compare_cors()
+# function — which was written for multi-sample spatial data — works unchanged.
+comp_cors$sample <- "Zma_metacell"
+```
+
+```{r}
+library('ggh4x')
+library('ggsci')
 # Plot heatmap with CLDs
 p_heatmap_rho <- comp_cors |>
     mutate(Group = factor(Group, levels = rev(names(dup_pal)))) |>

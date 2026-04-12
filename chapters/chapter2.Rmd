@@ -37,12 +37,12 @@ Combine these 2 into 1 object
 duplication_info <- list(genes = paralog_genes,
                          pairs = paralog_pairs)
 rm(paralog_genes, paralog_pairs)
+duplication_info
 ```
 
 Overview of the duplication_info data
 ```{r}
 names(duplication_info)
-
 names(duplication_info$pairs)
 names(duplication_info$genes)
 ```
