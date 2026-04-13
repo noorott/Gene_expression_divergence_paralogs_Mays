@@ -55,13 +55,25 @@ mat <- assay(sce, "logcounts.sum")
 ```
 
 We filter genes that are not (lowly) expressed
+
 ```{r}
 mat <- remove_nonexp(mat, method = "median", min_exp=10)
 ```
-mean of 1 also used
+
+```{r}
+library(dplyr)
+
+as.data.frame(colData(sce)) %>%
+  group_by(Organ) %>%
+  summarise(n_celltypes = n_distinct(Celltype_original))
+```
+Tissue with least amount of cell types has 6 (14%), want to keep tissue specific genes so min_percentage_samples is set to 10%
+```{r}
+mat <- remove_nonexp(mat, method = "percentage", min_exp=0.01, min_percentage_samples = 0.1)
+```
 
 Optimal beta value is determined with the function SFT_fit()
-(beta = controls how much you emphasize strong correlations and supress weak ones; correlations are converted by the power of beta)
+(beta = controls how much you emphasize strong correlations and suppress weak ones; correlations are converted by the power of beta)
 
 In general, (biological) networks often display a scale free topology, with many genes being lowly connected and few highly connected. This behavior is often used as quality control of networks and is measured with SFT.R.sq. This value normally increases with beta. An appropriate beta is then selected as the lowest one meeting SFT.R.sq threshold (eg 0.8), while also taking into account the connectivity (don't want it too low).
 
@@ -106,7 +118,7 @@ if (run_gcn) {
 Extract hubs; groups of highly co-expressed genes
 ```{r}
 # Extract hubs,
-final_df <- cbind(gcn$genes_and_modules, gcn$kIN) |>
+final_df <- cbind(gcn$genes_and_modules, gcn$kIN) %>%
   filter(Modules != "grey") # grey module is the trash bin module
 
 # split in tables for each module; want every module in the gcn to be represented
