@@ -486,7 +486,7 @@ sea <- lapply(sp, function(x) {
     
     ## Perform SEA
     bg <- zrho_fams 
-    bg <- unique(bg$dup1, bg$dup2)
+    bg <- unique(c(bg$dup1, bg$dup2))
     
     df_high <- HybridExpress::ora(
         genes = genes_high,
