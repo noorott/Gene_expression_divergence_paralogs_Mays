@@ -100,7 +100,7 @@ if (run_gcn) {
     gcn <- exp2gcn(
     mat,
     net_type = "signed hybrid", # hybrid: sim = cor if cor>0 else 0
-    SFTpower = 20,       
+    SFTpower = 10,       
     cor_method = "spearman",   
     return_cormat = FALSE,      # whether you want the correlation matrix
     verbose = TRUE
@@ -226,9 +226,9 @@ figure_ora
 
 Saving figure
 ```{r}
-ggsave(here("plots_and_figures", "figure_ORA_DupMode_HubGenes.png"), 
+ggsave(here("plots_and_figures", "figure_ORA_DupMode_HubGenes2.png"), 
        figure_ora,
-       width = 6,
+       width = 7,
        height = 5)
 ```
 
