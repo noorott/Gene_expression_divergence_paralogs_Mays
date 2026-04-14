@@ -8,11 +8,9 @@ output: html_document
 ```{r setup, include=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(SingleCellExperiment)
-library(dplyr)
-library(tidyr)
+library(tidyverse)
 library(Matrix)
 library(here)
-library(ggplot2)
 library(patchwork)
 ```
 
@@ -23,7 +21,7 @@ We will start from the data obtained in chapter 2; duplication_info_filtered
 # Reading in the data
 
 ```{r}
-duplication_info_filtered <- readRDS("../Duplication_data/duplication_info_filtered.rds")
+duplication_info_filtered <- readRDS(here("Duplication_data", "duplication_info_filtered.rds"))
 duplication_info_filtered
 duplication_modes <- data.frame(duplication_info_filtered$pairs) |>
   select(dup1, dup2, type) 
@@ -38,10 +36,10 @@ Let's construct a matrix containing the following variables:
 - Duplication mode
 - Location of expression 
 
-Metacells are used to reduce technical noise and dropout effects inherent to single-cell RNA sequencing data by aggregating transcriptionally similar cells, resulting in more robust expression profiles that allow a more reliable estimation of gene expression breadth across cell types. 
+Metacells are used to reduce technical noise and dropout effects inherent to single-cell RNA sequencing data by aggregating transcriptionally similar cells, resulting in more robust expression profiles that allow a more reliable estimation of gene expression breadth across cell types. The single cell experiment object containing gene expression on metacell level is obtained from chapter 4.
 
 ```{r}
-metacells <- readRDS('../Chapters/metacell_sce.rds')
+metacells <- readRDS(here("Chapters", "metacell_sce.rds"))
 coldata_metacells <- colData(metacells)
 ```
 This object contains the celltypes of the metacells. 
@@ -100,14 +98,13 @@ expressed_dup1 <- inner_join(metacells_duplication_mode,
                              by = "dup1") |>
   select(dup1, dup2, type, celltype)
 
-expressed_duplicates_type_celltype <- bind_rows(expressed_dup1, expressed_dup2) |>
-  distinct() 
-expressed_duplicates_type_celltype
+head(expressed_dup1)
+head(expressed_dup2)
 ```
-Now, we have to table we want to calculate the REB. First, we count in how many tissues each pair is expressed. 
+Now that we have the tables, we want to calculate the REB. First, we count in how many tissues each pair is expressed. 
 
 ```{r}
-dup_pairs_wide <- readRDS("../Chapters/dup_pairs.rds") |>
+dup_pairs_wide <- duplication_info_filtered$pairs[c("dup1", "dup2")] |>
   mutate(pair_id = row_number()) |>
   select(pair_id, dup1, dup2)
 
@@ -144,7 +141,7 @@ dup_pairs <- dup_pairs_wide |>
                names_to = "duplicate", 
                values_to = "gene") |>
   distinct() #to make the object smaller
-#computionally too intense for the pipe, so did it in steps 
+#computationally too intense for the pipe, so did it in steps 
 df_counts_singles_dup1 <- expressed_dup1 |>
   left_join(dup_pairs_wide, by = c("dup1", "dup2")) |>
   group_by(pair_id, type) |>
@@ -189,7 +186,8 @@ Let's run a small check, must show TRUE
 ```{r}
 all(reb$REB_dup1 <= 1, reb$REB_dup2 <= 1, na.rm = TRUE)
 ```
-#Obtaining the divergence class
+
+# Obtaining the divergence class
 
 Now that we have the REB for each gene in each duplicate pair, we can categorize them;
 - Redundancy: both genes have REB > 0.7
@@ -261,14 +259,14 @@ plot <- ggplot(plot_data, aes(x = type, y = divergence_class, fill = log10(n))) 
             color = "black", size = 5) +
   scale_fill_gradient(low = "white", high = "darkgreen", name = "Log10 N") +
   labs(
-    title = "Expression divergence pattern and duplication mode: Zea mays",
+    title = "Expression divergence pattern and duplication mode",
     x = "Duplication mode",
     y = "Divergence class"
   ) +
   theme_bw()
 plot
 
-if (FALSE){ggsave("../plots_and_figures/divergence_duplication_heatmap.png", 
+if (FALSE){ggsave(here("plots_and_figures", "divergence_duplication_heatmap.png"), 
        plot = plot,
        width = 8, 
        height = 4, 
@@ -296,12 +294,13 @@ p_density <- reb |>
   scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1)) +
   theme_bw() +
   theme(panel.spacing = unit(0.2, "lines")) +
-  theme(panel.spacing = unit(1.5, "lines"),  # verder uit elkaar
-        aspect.ratio = 0.95)                  # rechthoek met langste basis
+  theme(panel.spacing = unit(1.5, "lines"),  # further apart
+        aspect.ratio = 0.95)                
 
 p_density
 
-if (FALSE) {ggsave("../plots_and_figures/reb_density_scatterplot.png",
+
+if (FALSE) {ggsave(here("plots_and_figures", "reb_density_scatterplot.png"),
        plot = p_density,
        width = 12,
        height = 3,
@@ -314,7 +313,8 @@ combined_plot <- p_density / plot +
 
 combined_plot
 
-ggsave("../plots_and_figures/combined_plot.png",
+
+ggsave(here("plots_and_figures", "combined_plot.png"),
        plot = combined_plot,
        width = 24,
        height = 20,
@@ -330,6 +330,9 @@ Plot B reveals a significant association between duplication mode and divergence
 Overall, these results indicate that while redundancy remains the most common outcome for duplicate gene pairs in Zea mays, the evolutionary trajectory a gene pair follows is not entirely random but is partly determined by the mechanism of duplication. This suggests that the genomic context and molecular mechanisms underlying each duplication mode play a role in shaping the subsequent functional divergence of duplicate genes.
 
 
+```{r}
+sessionInfo()
+```
 
 
 
