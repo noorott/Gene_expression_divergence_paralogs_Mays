@@ -63,8 +63,8 @@ mat <- remove_nonexp(mat, method = "median", min_exp=10)
 ```{r}
 library(dplyr)
 
-as.data.frame(colData(sce)) %>%
-  group_by(Organ) %>%
+as.data.frame(colData(sce)) |>
+  group_by(Organ) |>
   summarise(n_celltypes = n_distinct(Celltype_original))
 ```
 Tissue with least amount of cell types has 6 (14%), want to keep tissue specific genes so min_percentage_samples is set to 10%
@@ -118,15 +118,15 @@ if (run_gcn) {
 Extract hubs; groups of highly co-expressed genes
 ```{r}
 # Extract hubs,
-final_df <- cbind(gcn$genes_and_modules, gcn$kIN) %>%
+final_df <- cbind(gcn$genes_and_modules, gcn$kIN) |>
   filter(Modules != "grey") # grey module is the trash bin module
 
 # split in tables for each module; want every module in the gcn to be represented
 # get top 10% 
 hubs <- lapply(split(final_df, final_df$Modules), function(x) {
-  hubs_vec <- x %>%
-    arrange(-kWithin) %>%
-    slice_head(n = round(nrow(x) * 0.1)) %>%
+  hubs_vec <- x |>
+    arrange(-kWithin) |>
+    slice_head(n = round(nrow(x) * 0.1)) |>
     pull(Genes)
   
   return(hubs_vec)
@@ -141,15 +141,15 @@ hubs <- unname(unlist(hubs))
 Summarize number of (paralog) hub genes per duplication mode, compare with background frequency.
 ```{r}
 # count number of (paralog) hub genes per duplication mode
-dup_genes[dup_genes$gene %in% hubs, ]$type %>% 
-  table() %>%
-  prop.table() %>% 
+dup_genes[dup_genes$gene %in% hubs, ]$type |> 
+  table() |>
+  prop.table() |> 
   round(3) * 100 #display as percentage
 
 # count number of (paralog) genes per duplication mode (=background frequency)
-dup_genes$type %>% 
-  table() %>% 
-  prop.table() %>% 
+dup_genes$type |> 
+  table() |> 
+  prop.table() |> 
   round(3) * 100 #display as percentage
 ```
 
@@ -185,7 +185,7 @@ dup_pal <- c(
 # Reorder the df to the order in the color pallete for the duplication modes
 ora_HubsDup <- ora_HubsDup[match(names(dup_pal), ora_HubsDup$term),]
 
-figure_ora <- ora_HubsDup %>%
+figure_ora <- ora_HubsDup |>
   mutate(
     term = factor(term, levels = c("SD",
                                    "TD",
@@ -201,7 +201,7 @@ figure_ora <- ora_HubsDup %>%
       padj <= 0.001 ~ "***",
       TRUE ~ ""
     )
-  ) %>% 
+  ) |> 
   ggplot(aes(x=genes, y=term)) +
     geom_point(
       aes(fill=term, size = logP, alpha = significant),
@@ -223,6 +223,8 @@ figure_ora <- ora_HubsDup %>%
 
 figure_ora
 ```
+Paralogs produced by segmental duplication (SD) are significantly overrepresented in the hubs of the gene coexpression network.
+
 
 Saving figure
 ```{r}
