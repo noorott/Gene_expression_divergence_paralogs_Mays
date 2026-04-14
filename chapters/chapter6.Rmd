@@ -323,11 +323,11 @@ ggsave(here("plots_and_figures", "combined_plot.png"),
 
 #Interpretation and conclusion
 
-Plot A shows that the majority of gene pairs have a high REB for both genes, clustering in the upper right corner across all duplication modes. This indicates that broad expression across many cell types is the most common outcome for duplicate gene pairs in Zea mays, suggesting that complete redundancy is still the predominant state for most duplicates.
+Plot A shows that the majority of gene pairs have a high REB for both genes, clustering in the upper right corner across all duplication modes. This indicates that broad expression across many cell types is the most common outcome for duplicate gene pairs in *Zea mays*, suggesting that complete redundancy is still the predominant state for most duplicates.
 
 Plot B reveals a significant association between duplication mode and divergence class, indicating that the mode of duplication influences the direction of expression divergence. Redundancy is the most frequently observed class across all duplication modes, consistent with the patterns observed in plot A. However, the strength of association varies considerably between duplication modes. SD and DD show the strongest associations with specific divergence classes, suggesting that these duplication modes more strongly direct duplicate gene pairs towards a particular divergence outcome. In contrast, rTRD shows no significant associations with any divergence class, suggesting that this duplication mode has a more neutral effect on the direction of expression divergence.
 
-Overall, these results indicate that while redundancy remains the most common outcome for duplicate gene pairs in Zea mays, the evolutionary trajectory a gene pair follows is not entirely random but is partly determined by the mechanism of duplication. This suggests that the genomic context and molecular mechanisms underlying each duplication mode play a role in shaping the subsequent functional divergence of duplicate genes.
+Overall, these results indicate that while redundancy remains the most common outcome for duplicate gene pairs in *Zea mays*, the evolutionary trajectory a gene pair follows is not entirely random but is partly determined by the mechanism of duplication. This suggests that the genomic context and molecular mechanisms underlying each duplication mode play a role in shaping the subsequent functional divergence of duplicate genes.
 
 
 ```{r}
