@@ -55,19 +55,12 @@ mat <- assay(sce, "logcounts.sum")
 ```
 
 We filter genes that are not (lowly) expressed
-
 ```{r}
-mat <- remove_nonexp(mat, method = "median", min_exp=10)
-```
-
-```{r}
-library(dplyr)
-
 as.data.frame(colData(sce)) |>
   group_by(Organ) |>
   summarise(n_celltypes = n_distinct(Celltype_original))
 ```
-Tissue with least amount of cell types has 6 (14%), want to keep tissue specific genes so min_percentage_samples is set to 10%
+Organ with least amount of cell types has 6 (14%), want to keep organ specific genes so min_percentage_samples is set to 10%
 ```{r}
 mat <- remove_nonexp(mat, method = "percentage", min_exp=0.01, min_percentage_samples = 0.1)
 ```
@@ -86,11 +79,7 @@ Take a look at results
 sft$power
 sft$plot
 ```
-
-SFT.R.sq and truncated.R.sq are high at lower beta values (3-6). However, the values initially decrease with increasing beta and the slope is positive. This is quite abnormal; the network connectivity follows a power like pattern, but a positive slope means it is in the opposite way (low connectivity is rare and high connectivity is common). Thus, at lower beta the network is very dense, with many nodes having similarly high connectivity
-
-At higher values of beta, the pattern of SFT.R.sq and the sign of slope behave more like expected, but the fit to a scale free topology remains modest (+-0.5). 
-We chose a value of 20 for beta to enforce a biologically meaningful power relation, despite the fit not being optimal.
+SFT.R.sq and truncated.R.sq do not reach the threshold value, indicating that the network does not perfectly adhere to a scale free topology. A beta value of 10 is chosen as SFT.R.sq plateaus at higher values.
 
 Infer GCN 
 ```{r}
