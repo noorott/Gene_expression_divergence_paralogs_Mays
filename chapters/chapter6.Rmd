@@ -1,0 +1,349 @@
+---
+title: "Chapter 6"
+author: "Emmeline Van Rijswijck"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(SingleCellExperiment)
+library(tidyverse)
+library(Matrix)
+library(here)
+library(patchwork)
+```
+
+## Frequency of genes in each divergence class originating from each duplication mode
+
+We will start from the data obtained in chapter 2; duplication_info_filtered 
+
+# Reading in the data
+
+```{r}
+duplication_info_filtered <- readRDS(here("Duplication_data", "duplication_info_filtered.rds"))
+duplication_info_filtered
+duplication_modes <- data.frame(duplication_info_filtered$pairs) |>
+  select(dup1, dup2, type) 
+duplication_modes
+```
+This dataframe contains all duplicates and their duplication type. The goal of the next steps is to make a dataframe containing everything above and to add the tissue in which the genes are expressed. After that, we can calculate the relative expression breadth. 
+
+# Adding the location of expression and counting the location of expression for all scenarios
+
+Let's construct a matrix containing the following variables:
+- Gene duplicates 
+- Duplication mode
+- Location of expression 
+
+Metacells are used to reduce technical noise and dropout effects inherent to single-cell RNA sequencing data by aggregating transcriptionally similar cells, resulting in more robust expression profiles that allow a more reliable estimation of gene expression breadth across cell types. The single cell experiment object containing gene expression on metacell level is obtained from chapter 4.
+
+```{r}
+metacells <- readRDS(here("Chapters", "metacell_sce.rds"))
+coldata_metacells <- colData(metacells)
+```
+This object contains the celltypes of the metacells. 
+
+```{r}
+genes_metacells <- data.frame(gene = rownames(metacells))
+genes_metacells
+```
+
+
+I still need to check if the genes in metacells are the ones before or after the duplication, but this is easily adjusted by changing which column you call gene in this chunk of code. --> solved by making the object for both duplicates. 
+```{r}
+duplication_modes_step <- duplication_modes |>
+  mutate(gene = dup2) #I used dup2 because i think the genes in metacells are also the genes after the duplication? 
+duplication_modes_step
+metacells_duplication_mode <- inner_join(duplication_modes_step, 
+                                         genes_metacells, 
+                                         by = c('gene')) |>
+  select(dup1, dup2, type)
+metacells_duplication_mode
+```
+By taking this step, you are sure to only include the genes present in the metacells. 
+
+Now we have to filter for the genes that were actually expressed. The data is stored as a sparse matrix, so genes that are not expressed and would get 0, the 0 is not stored and we see a '.'. 
+
+```{r}
+head(assay(metacells))
+```
+Next, we make a dataframe containing the celltype and the cell_id, this way we can match the celltype with the actually expressed genes, to have the dataframe we want, containing; dup1, dup2, duplication mode and celltype. 
+```{r}
+coldata_metacells$cell_idx <- 1:nrow(coldata_metacells)
+coldata_metacells
+```
+
+```{r}
+gene_expressed <- summary(assay(metacells)) |>
+  as.data.frame() |>
+  rename(gene_idx = i, cell_idx = j, expr = x) |>
+  mutate(
+    gene = rownames(metacells)[gene_idx]) #take the corresponding gene in metacells 
+gene_expressed
+
+expressed_gene_celltype <- inner_join(gene_expressed, 
+                                      as.data.frame(coldata_metacells), 
+                                      by = 'cell_idx') |>
+  select(gene, celltype) 
+expressed_gene_celltype
+
+expressed_dup2 <- inner_join(metacells_duplication_mode, 
+                             expressed_gene_celltype |> rename(dup2=gene), 
+                             by = "dup2") |>
+  select(dup1, dup2, type, celltype)
+
+expressed_dup1 <- inner_join(metacells_duplication_mode, 
+                             expressed_gene_celltype |> rename(dup1=gene), 
+                             by = "dup1") |>
+  select(dup1, dup2, type, celltype)
+
+head(expressed_dup1)
+head(expressed_dup2)
+```
+Now that we have the tables, we want to calculate the REB. First, we count in how many tissues each pair is expressed. 
+
+```{r}
+dup_pairs_wide <- duplication_info_filtered$pairs[c("dup1", "dup2")] |>
+  mutate(pair_id = row_number()) |>
+  select(pair_id, dup1, dup2)
+
+df_counts <- full_join(
+  expressed_dup1 |> 
+    group_by(dup1, dup2, type) |> 
+    summarise(celltypes_dup1 = list(unique(celltype)),
+              .groups = "drop"),
+  expressed_dup2 |> 
+    group_by(dup1, dup2, type) |>
+    summarise(celltypes_dup2 = list(unique(celltype)),
+              .groups = "drop"),
+  by = c("dup1", "dup2", "type")) |>
+  mutate(celltypes_dup1 = ifelse(is.na(celltypes_dup1), 
+                                 list(character(0)), celltypes_dup1),
+         celltypes_dup2 = ifelse(is.na(celltypes_dup2), 
+                            list(character(0)), celltypes_dup2),
+         n_tissues_union = mapply(function(a, b) length(union(a, b)), 
+                                  celltypes_dup1, celltypes_dup2)) |>
+  select(dup1, dup2, type, n_tissues_union) |>
+  left_join(dup_pairs_wide, by = c("dup1", "dup2"))
+
+df_counts
+if (FALSE) {
+  saveRDS(df_counts, here("chapters", "df_counts.rds"))
+}
+```
+
+Now we need to make the same dataframe for the genes within the duplicate pair. I made the assumption that dup1 is also expressed in the place where dup2 is expressed? I do not know how I would need to account for the expression location of dup1 otherwise? 
+
+```{r}
+dup_pairs <- dup_pairs_wide |>
+  pivot_longer(cols = c("dup1", "dup2"), 
+               names_to = "duplicate", 
+               values_to = "gene") |>
+  distinct() #to make the object smaller
+#computationally too intense for the pipe, so did it in steps 
+df_counts_singles_dup1 <- expressed_dup1 |>
+  left_join(dup_pairs_wide, by = c("dup1", "dup2")) |>
+  group_by(pair_id, type) |>
+  summarise(n_dup1 = n_distinct(celltype), .groups = "drop")
+
+df_counts_singles_dup2 <- expressed_dup2 |>
+  left_join(dup_pairs_wide, by = c("dup1", "dup2")) |>
+  group_by(pair_id, type) |>
+  summarise(n_dup2 = n_distinct(celltype), .groups = "drop")
+
+df_counts_singles_final <- full_join(df_counts_singles_dup1, 
+                                     df_counts_singles_dup2, 
+                                     by = c("pair_id", "type")) |>
+  mutate(n_dup1 = replace_na(n_dup1, 0),
+         n_dup2 = replace_na(n_dup2, 0))
+
+df_counts_singles_final
+if (FALSE) {
+  saveRDS(df_counts_singles_final, here("chapters", "df_counts_singles_final.rds"))
+}
+```
+# Calculate the relative expression breadth
+
+The relative expression breadth REBA for gene A, in a pair of duplicates gene A and gene B, is defined as the proportion of cell types in which gene A is expressed relative to the total number of cell types in which both gene A and gene B is expressed. To calculate this, we will be using the tissue where the genes are expressed. 
+
+To calculate relative expression breadth, a dataset is required that indicates which genes are expressed in which cell types, typically represented as a matrix where each gene is scored for expression across all analyzed cell types; the breadth is then computed as the fraction of cell types in which a gene is expressed.
+
+```{r}
+reb <- df_counts_singles_final |>
+  left_join(df_counts,
+            by = c("pair_id", "type")) |>        
+  mutate(
+    REB_dup1 = n_dup1 / n_tissues_union,
+    REB_dup2 = n_dup2 / n_tissues_union
+  )
+reb
+if (FALSE) {
+  saveRDS(reb, here("chapters", "reb.rds"))
+}
+```
+Let's run a small check, must show TRUE
+```{r}
+all(reb$REB_dup1 <= 1, reb$REB_dup2 <= 1, na.rm = TRUE)
+```
+
+# Obtaining the divergence class
+
+Now that we have the REB for each gene in each duplicate pair, we can categorize them;
+- Redundancy: both genes have REB > 0.7
+- Asymmetric divergence: one gene with REB > 0.7 and the other with REB < 0.3
+- Symmetric divergence: both genes have REB between 0.3 and 0.7
+```{r}
+reb <- reb |>
+  mutate(divergence_class = case_when(
+    REB_dup1 > 0.7 & REB_dup2 > 0.7 ~ "Redundancy",
+    (REB_dup1 > 0.7 & REB_dup2 < 0.3) | (REB_dup1 < 0.3 & REB_dup2 > 0.7) ~ "Asymmetric divergence",
+    REB_dup1 >= 0.3 & REB_dup1 <= 0.7 & REB_dup2 >= 0.3 & REB_dup2 <= 0.7 ~ "Symmetric divergence",
+    TRUE ~ NA_character_
+  ))
+```
+
+Let's see how many genes were not assigned to any of these groups.
+```{r}
+sum(is.na(reb$divergence_class))
+```
+And how many did get assigned
+```{r}
+sum(!is.na(reb$divergence_class))
+```
+These numbers show that +/- 75% of the genes were assigned to a category. (Would this be enough?)
+
+#Making the plot
+Now that we have the table we need, we can start to make the plot. Let's take a look at our object again; 
+```{r}
+reb
+```
+Before making the plot, we will need to look at the association between the duplication mode and the divergence class. To determine if there is a significant link between both of them, we conduct a chi-squared test and calculate the p-values. 
+
+```{r}
+plot_data <- reb |>
+  filter(!is.na(divergence_class)) |>
+  group_by(divergence_class, type) |>
+  summarise(N = n(), .groups = "drop")
+
+div_type_counts <- reb |>
+  filter(!is.na(divergence_class)) |>
+  count(divergence_class, type)
+
+expected <- chisq.test(xtabs(n ~ divergence_class + type, data = div_type_counts))
+
+residuals_df <- as.data.frame(expected$stdres) |>
+  rename(divergence_class = divergence_class, type = type, stdres = Freq) |>
+  mutate(significant = abs(stdres) > 1.96) # p < 0.05
+
+plot_data <- div_type_counts |>
+  left_join(residuals_df, by = c("divergence_class", "type")) |>
+  mutate(
+    divergence_class = factor(divergence_class, 
+                              levels = c("Redundancy", 
+                                         "Symmetric divergence", 
+                                         "Asymmetric divergence")),
+    type = factor(type, 
+                  levels = c("SD", 
+                             "TD", 
+                             "PD", 
+                             "dTRD", 
+                             "rTRD", 
+                             "DD"))
+  )
+
+plot <- ggplot(plot_data, aes(x = type, y = divergence_class, fill = log10(n))) +
+  geom_tile() +
+  geom_text(data = filter(plot_data, significant), 
+            aes(label = "*"), 
+            color = "black", size = 5) +
+  scale_fill_gradient(low = "white", high = "darkgreen", name = "Log10 N") +
+  labs(
+    title = "Expression divergence pattern and duplication mode",
+    x = "Duplication mode",
+    y = "Divergence class"
+  ) +
+  theme_bw()
+plot
+
+if (FALSE){ggsave(here("plots_and_figures", "divergence_duplication_heatmap.png"), 
+       plot = plot,
+       width = 8, 
+       height = 4, 
+       dpi = 300)}
+```
+Because it is easy to make and the data is ready, we will be making another plot too, this may help in the interpretation and conclusion. 
+
+```{r}
+p_density <- reb |>
+  filter(!is.na(divergence_class)) |>
+  mutate(type = factor(type, levels = c("SD", "TD", "PD", "rTRD", "dTRD", "DD"))) |>
+  ggplot(aes(x = REB_dup1, y = REB_dup2)) +
+  stat_density_2d(aes(fill = after_stat(density)), 
+                  geom = "raster", 
+                  contour = FALSE) +
+  scale_fill_gradient(low = "white", high = "darkblue", name = "Density") +
+  facet_wrap(~ type, nrow = 1) +
+  labs(
+    title = "Relative expression breadth of paralogs",
+    subtitle = "Scatterplots are represented by their smoothed densities",
+    x = "REB of gene 1",
+    y = "REB of gene 2"
+  ) +
+  scale_x_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1)) +
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1)) +
+  theme_bw() +
+  theme(panel.spacing = unit(0.2, "lines")) +
+  theme(panel.spacing = unit(1.5, "lines"),  # further apart
+        aspect.ratio = 0.95)                
+
+p_density
+
+
+if (FALSE) {ggsave(here("plots_and_figures", "reb_density_scatterplot.png"),
+       plot = p_density,
+       width = 12,
+       height = 3,
+       dpi = 300)}
+```
+```{r}
+combined_plot <- p_density / plot + 
+  plot_annotation(tag_levels = "A") +
+  plot_layout(heights = c(2, 3))
+
+combined_plot
+
+
+ggsave(here("plots_and_figures", "combined_plot.png"),
+       plot = combined_plot,
+       width = 24,
+       height = 20,
+       dpi = 300)
+```
+
+#Interpretation and conclusion
+
+Plot A shows that the majority of gene pairs have a high REB for both genes, clustering in the upper right corner across all duplication modes. This indicates that broad expression across many cell types is the most common outcome for duplicate gene pairs in *Zea mays*, suggesting that complete redundancy is still the predominant state for most duplicates.
+
+Plot B reveals a significant association between duplication mode and divergence class, indicating that the mode of duplication influences the direction of expression divergence. Redundancy is the most frequently observed class across all duplication modes, consistent with the patterns observed in plot A. However, the strength of association varies considerably between duplication modes. SD and DD show the strongest associations with specific divergence classes, suggesting that these duplication modes more strongly direct duplicate gene pairs towards a particular divergence outcome. In contrast, rTRD shows no significant associations with any divergence class, suggesting that this duplication mode has a more neutral effect on the direction of expression divergence.
+
+Overall, these results indicate that while redundancy remains the most common outcome for duplicate gene pairs in *Zea mays*, the evolutionary trajectory a gene pair follows is not entirely random but is partly determined by the mechanism of duplication. This suggests that the genomic context and molecular mechanisms underlying each duplication mode play a role in shaping the subsequent functional divergence of duplicate genes.
+
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

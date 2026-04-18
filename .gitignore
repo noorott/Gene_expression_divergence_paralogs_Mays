@@ -44,6 +44,7 @@ Duplication_data/dup_list_valid
 Duplication_data/final_IDmatch.rds
 Duplication_data/pairs_by_age_group_expanded.rds
 Duplication_data/zma_ID_converter.txt
+Duplication_data/functional_annotation.rds
 
 data
 products
