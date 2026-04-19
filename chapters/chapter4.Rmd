@@ -26,6 +26,8 @@ library(tidyr)
 library(stringr)
 library(purrr)
 library(HybridExpress)
+library('ggh4x')
+library('ggsci')
 ```
 
 ```{r}
@@ -144,7 +146,12 @@ sp_coeff_age <- dplyr::inner_join(paralog_pairs$pairs, sp_coeff, by = c("dup1", 
 # This way we will only have 1 type column in the result
 ```
 
+Kruskal-Wallis test is a non-parametric statistical test to test for significant
+differences between multiple groups.The test is based on the ranks of the data.
+It is an extension of the Mann-Whitney-Wilcoxon test (only appropriate to compare 2 distr.)
 
+Post-hoc Dunnn test is used after the Kruskal-Wallis test to calculate wether the 
+pairwise differences in average rank is significant.
 
 ```{r}
 # Credits to Fabricio Almeida Silva 
@@ -207,8 +214,6 @@ comp_cors$sample <- "Zma_metacell"
 ```
 
 ```{r}
-library('ggh4x')
-library('ggsci')
 # Plot heatmap with CLDs
 p_heatmap_rho <- comp_cors |>
     mutate(Group = factor(Group, levels = rev(names(dup_pal)))) |>
