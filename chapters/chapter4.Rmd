@@ -25,6 +25,9 @@ library(ggplot2)
 library(tidyr)
 library(stringr)
 library(purrr)
+library(HybridExpress)
+library('ggh4x')
+library('ggsci')
 ```
 
 ```{r}
@@ -90,7 +93,7 @@ saveRDS(metacell_sce, here("chapters", "metacell_sce.rds"))
 
 # 2. Comparing distributions of gene-gene correlations by duplication mode
 
-read in the metacells
+read in the metacells and duplication data
 ```{r}
 metacell_sce <- readRDS(here("chapters", "metacell_sce.rds"))
 ```
@@ -111,7 +114,7 @@ paralog_pairs$pairs <- paralog_pairs$pairs[!is.na(paralog_pairs$pairs$peak_name)
 # Create a dataframe containing only the duplicated pairs and their type
 dups <- as.data.frame(paralog_pairs$pairs[, c("dup1", "dup2", "type")])
 
-# calculate the Spearman's correlation coëfficiënt using the exdiva package
+# Calculate the Spearman's correlation coëfficiënt using the exdiva package
 se_simple <- SummarizedExperiment(
   assays = list(logcounts = as.matrix(logcounts(metacell_sce)))
 )
@@ -143,7 +146,12 @@ sp_coeff_age <- dplyr::inner_join(paralog_pairs$pairs, sp_coeff, by = c("dup1", 
 # This way we will only have 1 type column in the result
 ```
 
+Kruskal-Wallis test is a non-parametric statistical test to test for significant
+differences between multiple groups.The test is based on the ranks of the data.
+It is an extension of the Mann-Whitney-Wilcoxon test (only appropriate to compare 2 distr.)
 
+Post-hoc Dunnn test is used after the Kruskal-Wallis test to calculate wether the 
+pairwise differences in average rank is significant.
 
 ```{r}
 # Credits to Fabricio Almeida Silva 
@@ -206,8 +214,6 @@ comp_cors$sample <- "Zma_metacell"
 ```
 
 ```{r}
-library('ggh4x')
-library('ggsci')
 # Plot heatmap with CLDs
 p_heatmap_rho <- comp_cors |>
     mutate(Group = factor(Group, levels = rev(names(dup_pal)))) |>
@@ -448,6 +454,68 @@ p_zrho_fam <- fams_ranked |>
 
 p_zrho_fam
 ```
+```{r}
+go_annot <- readRDS(here("Duplication_data", "functional_annotation.rds"))
+```
+
+
+```{r}
+# Select top 10% of the families with highest median correlations
+top10_high <- fams_ranked |>
+    slice_max(median, prop = 0.1) |>
+    ungroup()
+
+top10_low <- fams_ranked |>
+    slice_min(median, prop = 0.1) |>
+    ungroup()
+
+# Perform overrepresentation analyses
+sp <- names(go_annot)
+sea <- lapply(sp, function(x) {
+    
+    ## Get top 10% families (highest and lowest correlations)
+    t10_high <- top10_high |>
+        pull(family)
+    
+    t10_low <- top10_low |>
+        pull(family)
+    
+    ## Get gene sets
+    genes_high <- fams |>
+        filter(family %in% t10_high) |>
+        pull(gene)
+    
+    genes_low <- fams |>
+        filter(family %in% t10_low) |>
+        pull(gene)
+    
+    ## Perform SEA
+    bg <- zrho_fams 
+    bg <- unique(c(bg$dup1, bg$dup2))
+    
+    df_high <- HybridExpress::ora(
+        genes = genes_high,
+        annotation = as.data.frame(go_annot[[x]]),
+        background = bg
+    ) |>
+        mutate(category = "highcor")
+    
+    df_low <- HybridExpress::ora(
+        genes = genes_low,
+        annotation = as.data.frame(go_annot[[x]]),
+        background = bg
+    ) |>
+        mutate(category = "lowcor")
+    
+    final_df <- bind_rows(df_high, df_low)
+    
+    return(final_df)
+}) |>
+    bind_rows()
+```
+
+Logically the high correlation genes should be the most important and
+fundamental functions. Check this in the sea object!!
 
 # 5. Saving objects
 

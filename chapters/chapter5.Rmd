@@ -56,12 +56,17 @@ mat <- assay(sce, "logcounts.sum")
 
 We filter genes that are not (lowly) expressed
 ```{r}
-mat <- remove_nonexp(mat, method = "median", min_exp=10)
+as.data.frame(colData(sce)) |>
+  group_by(Organ) |>
+  summarise(n_celltypes = n_distinct(Celltype_original))
 ```
-mean of 1 also used
+Organ with least amount of cell types has 6 (14%), want to keep organ specific genes so min_percentage_samples is set to 10%
+```{r}
+mat <- remove_nonexp(mat, method = "percentage", min_exp=0.01, min_percentage_samples = 0.1)
+```
 
 Optimal beta value is determined with the function SFT_fit()
-(beta = controls how much you emphasize strong correlations and supress weak ones; correlations are converted by the power of beta)
+(beta = controls how much you emphasize strong correlations and suppress weak ones; correlations are converted by the power of beta)
 
 In general, (biological) networks often display a scale free topology, with many genes being lowly connected and few highly connected. This behavior is often used as quality control of networks and is measured with SFT.R.sq. This value normally increases with beta. An appropriate beta is then selected as the lowest one meeting SFT.R.sq threshold (eg 0.8), while also taking into account the connectivity (don't want it too low).
 
@@ -74,11 +79,7 @@ Take a look at results
 sft$power
 sft$plot
 ```
-
-SFT.R.sq and truncated.R.sq are high at lower beta values (3-6). However, the values initially decrease with increasing beta and the slope is positive. This is quite abnormal; the network connectivity follows a power like pattern, but a positive slope means it is in the opposite way (low connectivity is rare and high connectivity is common). Thus, at lower beta the network is very dense, with many nodes having similarly high connectivity
-
-At higher values of beta, the pattern of SFT.R.sq and the sign of slope behave more like expected, but the fit to a scale free topology remains modest (+-0.5). 
-We chose a value of 20 for beta to enforce a biologically meaningful power relation, despite the fit not being optimal.
+SFT.R.sq and truncated.R.sq do not reach the threshold value, indicating that the network does not perfectly adhere to a scale free topology. A beta value of 10 is chosen as SFT.R.sq plateaus at higher values.
 
 Infer GCN 
 ```{r}
@@ -88,7 +89,7 @@ if (run_gcn) {
     gcn <- exp2gcn(
     mat,
     net_type = "signed hybrid", # hybrid: sim = cor if cor>0 else 0
-    SFTpower = 20,       
+    SFTpower = 10,       
     cor_method = "spearman",   
     return_cormat = FALSE,      # whether you want the correlation matrix
     verbose = TRUE
@@ -112,9 +113,9 @@ final_df <- cbind(gcn$genes_and_modules, gcn$kIN) |>
 # split in tables for each module; want every module in the gcn to be represented
 # get top 10% 
 hubs <- lapply(split(final_df, final_df$Modules), function(x) {
-  hubs_vec <- x %>%
-    arrange(-kWithin) %>%
-    slice_head(n = round(nrow(x) * 0.1)) %>%
+  hubs_vec <- x |>
+    arrange(-kWithin) |>
+    slice_head(n = round(nrow(x) * 0.1)) |>
     pull(Genes)
   
   return(hubs_vec)
@@ -129,15 +130,15 @@ hubs <- unname(unlist(hubs))
 Summarize number of (paralog) hub genes per duplication mode, compare with background frequency.
 ```{r}
 # count number of (paralog) hub genes per duplication mode
-dup_genes[dup_genes$gene %in% hubs, ]$type %>% 
-  table() %>%
-  prop.table() %>% 
+dup_genes[dup_genes$gene %in% hubs, ]$type |> 
+  table() |>
+  prop.table() |> 
   round(3) * 100 #display as percentage
 
 # count number of (paralog) genes per duplication mode (=background frequency)
-dup_genes$type %>% 
-  table() %>% 
-  prop.table() %>% 
+dup_genes$type |> 
+  table() |> 
+  prop.table() |> 
   round(3) * 100 #display as percentage
 ```
 
@@ -173,7 +174,7 @@ dup_pal <- c(
 # Reorder the df to the order in the color pallete for the duplication modes
 ora_HubsDup <- ora_HubsDup[match(names(dup_pal), ora_HubsDup$term),]
 
-figure_ora <- ora_HubsDup %>%
+figure_ora <- ora_HubsDup |>
   mutate(
     term = factor(term, levels = c("SD",
                                    "TD",
@@ -189,7 +190,7 @@ figure_ora <- ora_HubsDup %>%
       padj <= 0.001 ~ "***",
       TRUE ~ ""
     )
-  ) %>% 
+  ) |> 
   ggplot(aes(x=genes, y=term)) +
     geom_point(
       aes(fill=term, size = logP, alpha = significant),
@@ -211,12 +212,14 @@ figure_ora <- ora_HubsDup %>%
 
 figure_ora
 ```
+Paralogs produced by segmental duplication (SD) are significantly overrepresented in the hubs of the gene coexpression network.
+
 
 Saving figure
 ```{r}
-ggsave(here("plots_and_figures", "figure_ORA_DupMode_HubGenes.png"), 
+ggsave(here("plots_and_figures", "figure_ORA_DupMode_HubGenes2.png"), 
        figure_ora,
-       width = 6,
+       width = 7,
        height = 5)
 ```
 
