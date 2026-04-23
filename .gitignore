@@ -32,8 +32,6 @@ chapters/gene_families.rds
 
 Duplication_data/duplication_info
 Duplication_data/duplication_info_filtered
-Duplication_data/zma_allgenes.tsv
-Duplication_data/zma_allpairs.tsv
 Duplication_data/Zma_nuclearcoding_geneIDs.txt
 Duplication_data/duplication_info_filtered.rds
 Duplication_data/duplication_info.rds
