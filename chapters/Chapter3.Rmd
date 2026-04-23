@@ -13,7 +13,7 @@ options(timeout = 1e6) # to download large data files
 
 # Load helper functions
 here::i_am("chapters/chapter2.Rmd")
-source(here("products", "code", "utils.R"))
+#source(here("products", "code", "utils.R"))
 
 # Plot background
 bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
@@ -21,7 +21,7 @@ bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
 
 # 2 Gene level analysis
 ## 2.1 Load packages
-```{r}
+```{r, warning=FALSE}
 library(rcompanion)
 library(scuttle)
 library(tidyverse)
@@ -124,7 +124,7 @@ Calculate the sum and mean expression level for all genes across samples.
 dup_genes <- dup_list_valid$genes
 # dup_genes: 28902 x 2 (gene, type)
 
-# sum across all samples
+# sum across all samples --> all cells i think? 
 expr_sum <- rowSums(logcounts(sce_paralogs), na.rm = TRUE)
 
 expr_sum_df <- tibble::tibble(
@@ -250,7 +250,7 @@ ggsave(
 ```
 
 ## 2.3 Expression breadths of duplicated genes
-Expression breadths (the number of tissues in which a gene is expressed) are calculated for Zea mayse duplicate genes, and the differences in expression breadth by duplication mode are compared using Kruskal-Wallis and Dunn's post-hoc tests.
+Expression breadths (the number of tissues in which a gene is expressed) are calculated for Zea mays duplicate genes, and the differences in expression breadth by duplication mode are compared using Kruskal-Wallis and Dunn's post-hoc tests.
 
 Helpter function to calculate the proportion of cells in which each gene is detected for each cell type. This will be used to assess expression breadth across cell types.
 ```{r}
