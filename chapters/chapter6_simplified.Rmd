@@ -18,7 +18,7 @@ set.seed(132)
 ```
 # Goal of this chapter 
 
-The goal of this chapter is to calculate the relative expression breadth (REB), in order to be able to understand the evolutionary fates of paralogous genes at the expression level. When the REB is computed, we can classify the pairs in 3 categories; asymmetric divergence, symmetric divergence and redundancy.
+The goal of this chapter is to calculate the relative expression breadth (REB) in order to be able to understand the evolutionary fates of paralogous genes at the expression level. When the REB is computed, we can classify the pairs in 3 categories; asymmetric divergence, symmetric divergence and redundancy.
 
 - **Asymmetric divergence:** if a gene specializes in one or a few cell types, while the other remains broadly expressed
 - **Symmetric divergence:** if genes are expressed in complementary, (mostly) non-overlapping cell types
@@ -32,7 +32,7 @@ duplication_info_filtered <- readRDS(here("Duplication_data", "duplication_info_
 #duplications_info_filtered also contains the duplication types 
 duplication_modes <- data.frame(duplication_info_filtered$pairs) |>
   select(dup1, dup2, type)
-duplication_modes
+head(duplication_modes)
 ```
 
 This dataframe contains all duplicates and their duplication type.
@@ -102,7 +102,7 @@ genes_metacells <- rownames(metacells)
 pairs_filtered <- duplication_modes |>
   filter(dup1 %in% genes_metacells & dup2 %in% genes_metacells)
 
-pairs_filtered
+head(pairs_filtered)
 ```
 Now that we have the correct pairs, we can calculate the REBs. 
 ```{r}
@@ -112,17 +112,18 @@ reb <- calculate_reb(
     cell_type = "celltype",
     min_prop  = 0.01
 )
-reb
+head(reb)
 ```
 
-Let's run a small check, both REB values must always be <= 1:
+Let's run a small check, both REB values must always be <= 1 and the sum of both REB values should always be >=1:
 ```{r}
 all(reb$reb1 <= 1, reb$reb2 <= 1, na.rm = TRUE)
+all(reb$reb1 + reb$reb2 >= 1, na.rm = TRUE)
 ```
 
 # 6.2 Classifying paralogs into divergence classes
 
-Now we will classify gene pairs into three classes based on their relative expression breadths. The classes and their definitions are:
+Now we will classify gene pairs into three classes based on their relative expression breadths. The classes and their exact definitions are:
 
 1. **Asymmetric divergence:** one gene with REB > 0.7, and the other gene with REB < 0.3
 2. **Symmetric divergence:** both genes with REB between 0.3 and 0.7
@@ -148,10 +149,10 @@ reb_classes <- reb |>
     filter(class != "Undefined") |>
     as.data.frame()
 
-reb_classes
+head(reb_classes)
 ```
 
-Let's see how many pairs were assigned to each class:
+Let's see how many pairs were assigned to a class:
 ```{r}
 table(reb_classes$class)
 ```
@@ -160,7 +161,7 @@ And how many were not assigned:
 ```{r}
 nrow(reb) - nrow(reb_classes)
 ```
-We see that roughly 25% of the genes were not assigned, this may/must be kept in mind when looking at the results. 
+We see that roughly 25% of the genes were not assigned. These paralog pairs either had an NA or displayed an expression pattern somewhere between redundancy and divergence.
 
 ## Making the plots
 
@@ -169,15 +170,17 @@ We see that roughly 25% of the genes were not assigned, this may/must be kept in
 Next, we visualise relative expression breadths for each gene pair by duplication mode using smoothed density representations of scatterplots.
 
 ```{r}
-p_density <- reb_classes |>
+p_density <- reb |>
   mutate(type = factor(type, levels = c("SD", "TD", "PD", "rTRD", "dTRD", "DD"))) |>
   ggplot(aes(x = reb1, y = reb2)) +
-  stat_density_2d(
+  stat_density_2d_filled(
     aes(fill = after_stat(density)),
     geom = "raster",
-    contour = FALSE
+    contour = FALSE,
+    na.rm = TRUE
   ) +
-  scale_fill_gradient(low = "#f0f9ff", high = "#08519C", name = "Density") +
+  scale_fill_gradient(low = "#f0f9ff", high = "#08519C", 
+                      name = "Density", trans = "sqrt") +
   facet_wrap(~ type, nrow = 1) +
   scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.5),
                      labels = c(0, 0.5, 1), expand = c(0, 0)) +
@@ -188,7 +191,7 @@ p_density <- reb_classes |>
     panel.spacing = unit(0.2, "cm"),
     aspect.ratio = 0.8,
     strip.text = element_text(face = "bold"),
-    plot.title = element_text(face = "bold")
+    plot.title = element_text()
   ) +
   labs(
     x = "REB of gene 1",
@@ -204,10 +207,12 @@ if (FALSE) {
          plot = p_density, width = 12, height = 3, dpi = 300)
 }
 ```
+Notice that the scale in density is not linear; it is square root transformed to better show the lower densities as well.
 
 ### Overrepresentation of divergence classes per duplication mode
 
-Then, we will test for significant associations between each divergence class and duplication modes using overrepresentation analysis (ORA). Over-representation (or enrichment) analysis is a statistical method that determines whether genes from pre-defined sets (ex: those beloging to a specific GO term or KEGG pathway) are present more than would be expected (over-represented) in a subset of your data. (https://learn.gencore.bio.nyu.edu/rna-seq-analysis/over-representation-analysis/#:~:text=Over-representation%20%28or%20enrichment%29%20analysis%20is%20a%20statistical%20method,expected%20%28over-represented%29%20in%20a%20subset%20of%20your%20data.) 
+Then, we will test for significant associations between each divergence class and duplication modes using overrepresentation analysis (ORA). Over-representation (or enrichment) analysis is a statistical method that determines whether genes from pre-defined sets (eg those belonging to a specific GO term or KEGG pathway) are present more than would be expected (over-represented) in a subset of your data. (https://learn.gencore.bio.nyu.edu/rna-seq-analysis/over-representation-analysis/#:~:text=Over-representation%20%28or%20enrichment%29%20analysis%20is%20a%20statistical%20method,expected%20%28over-represented%29%20in%20a%20subset%20of%20your%20data.) 
+
 ```{r}
 ora_dupmode_class_function <- function(x) {
 
@@ -315,13 +320,12 @@ combined_plot <- p_density / plot +
   plot_layout(heights = c(1, 1))
 combined_plot
 
-if (FALSE) {ggsave(here("plots_and_figures", "combined_plot.png"),
+if (TRUE) {ggsave(here("plots_and_figures", "combined_plot.png"),
        plot = combined_plot,
-       width = 14,
-       height = 10,
+       width = 8,
+       height = 6,
        dpi = 300)}
 ```
-The version here does not look good, but the saved version looks better. 
 
 # Interpretation and conclusion
 
