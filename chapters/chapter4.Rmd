@@ -28,6 +28,8 @@ library(purrr)
 library(HybridExpress)
 library('ggh4x')
 library('ggsci')
+library(patchwork)
+library('FSA')
 ```
 
 ```{r}
@@ -203,7 +205,6 @@ compare_cors <- function(rho_df) {
 ```
 
 ```{r, warning= FALSE, message=FALSE}
-library('FSA')
 comp_cors <- compare_cors(sp_coeff_age) |> mutate(species = "Zma")
 ```
 
@@ -241,21 +242,20 @@ p_heatmap_rho
 POAC WGD: happened ∼53 MYA
 ZEAM WGD: happened ∼16 MYA 
 
-Older duplicates consistently display lower expression divergence, in line with findings from previous studies. Duplication mode also plays a clear role: in maize, paralogs show the greatest expression divergence among recent duplicates, for example in SD, TD, and dTRD. This contrasts with previous work, where duplication modes that preserve cis-regulatory landscapes — such as WGD and TRD — were associated with lower expression divergence compared to modes that disrupt them.
+# 3. Fisher's z-transformed rho across the dataset
 
-# 3. Mean Fisher's z-transformed rho across the dataset
-
-Since we have a single metacell dataset (no multiple slides to average over),
 we compute the Fisher's z-transformed rho per pair and visualise the
-distribution by duplication mode — analogous to the `zrho_mean` analysis in
-the spatial transcriptomics study.
+distribution by duplication mode. 
 
+Why we use this transformation:
+When the Pearson correlation coëfficiënt is near -1/1 the distribution of the coëfficiënt is 
+skewed. By applying the z-tranformation we compensate this affect and the 
+distribution will become more normal.
 
 ```{r}
 # Get mean Fisher's Z-transformed rho estimates
-# (Here "mean" is over duplicate entries of the same pair; in practice each
-#  pair appears once so this collapses to the pair-level z-rho.)
-zrho_mean <- sp_coeff_age |>
+
+zrho <- sp_coeff_age |>
     mutate(
         cor = 0.5 * log((1 + cor) / (1 - cor)),  # Fisher's z-transformation
         pair = str_c(dup1, dup2, sep = "_"),
@@ -273,7 +273,7 @@ zrho_mean <- sp_coeff_age |>
 
 # Compare distributions using the same KW + Dunn approach
 zrho_cld <- lapply(
-    split(zrho_mean, zrho_mean$species_peak),
+    split(zrho, zrho$species_peak),
     cld_kw_dunn, var = "type", value = "mean_cor"
 ) |>
     bind_rows(.id = "species_peak") |>
@@ -283,11 +283,12 @@ zrho_cld <- lapply(
         type = factor(type, levels = names(dup_pal)),
         peak = as.character(peak)
     ) |>
-    left_join(zrho_mean |> dplyr::select(peak, peak_name) |> distinct())
+    left_join(zrho |> dplyr::select(peak, peak_name) |> distinct())
 
 # Plot distributions with CLDs
-p_zrho_mean <- zrho_mean |>
+p_zrho <- zrho |>
     filter(mean_cor != Inf, !is.na(mean_cor)) |>
+    mutate(peak_name = factor(peak_name, levels = sort(unique(peak_name)))) |>
     ggplot(aes(x = mean_cor, y = type)) +
     geom_violin(aes(fill = type), scale = "width", show.legend = FALSE) +
     scale_fill_manual(values = dup_pal) +
@@ -306,8 +307,10 @@ p_zrho_mean <- zrho_mean |>
     scale_x_continuous(limits = c(-0.5, 1)) +
     theme_classic()
 
-p_zrho_mean
+p_zrho
 ```
+
+Older duplicates consistently display higher expression divergence, in line with findings from previous studies. Duplication mode also plays a clear role in the recent duplicates: in maize, paralogs show the greatest expression divergence among recent duplicates, for example in SD, TD, and dTRD. This contrasts with previous work, where duplication modes that preserve cis-regulatory landscapes — such as WGD and TRD — were associated with lower expression divergence compared to modes that disrupt them.
 
 # 4. Expression divergence over time
 
@@ -407,7 +410,7 @@ fams <- fams |> filter(species == "zma")
 
 ```{r}
 # Assign families to each pair
-zrho_fams <- zrho_mean |>
+zrho_fams <- zrho |>
     inner_join(fams |> dplyr::select(dup1 = gene, family)) |>
     filter(!mean_cor %in% c(Inf, -Inf))
 ```
@@ -528,8 +531,8 @@ ggsave(
 )
 
 ggsave(
-    filename = here("plots_and_figures", "zrho_mean_by_dupmode_zma.png"),
-    plot     = p_zrho_mean,
+    filename = here("plots_and_figures", "zrho_by_dupmode_zma.png"),
+    plot     = p_zrho,
     width    = 8, height = 3, dpi = 300
 )
 
@@ -543,6 +546,12 @@ ggsave(
     filename = here("plots_and_figures", "correlation_per_gene_family.png"),
     plot     = p_zrho_fam,
     width    = 9, height = 4, dpi = 300
+)
+
+ggsave(
+    filename = here("plots_and_figures", "combined_expression_divergence.png"),
+    plot     = p_zrho + p_zrho_fam + plot_annotation(tag_levels = "a"),
+    width    = 11, height = 4, dpi = 300
 )
 ```
 
