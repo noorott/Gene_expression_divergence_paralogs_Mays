@@ -13,7 +13,7 @@ options(timeout = 1e6) # to download large data files
 
 # Load helper functions
 here::i_am("chapters/chapter2.Rmd")
-source(here("products", "code", "utils.R"))
+#source(here("products", "code", "utils.R"))
 
 # Plot background
 bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
@@ -21,7 +21,7 @@ bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
 
 # 2 Gene level analysis
 ## 2.1 Load packages
-```{r}
+```{r, warning=FALSE}
 library(rcompanion)
 library(scuttle)
 library(tidyverse)
@@ -34,6 +34,7 @@ library(tibble)
 library(Matrix)
 library(stringr)
 library(ggplot2)
+library(HybridExpress)
 ```
 
 Load data
@@ -42,55 +43,6 @@ Load data
 ```{r}
 dup_list_valid <- readRDS(here("Duplication_data", "duplication_info_filtered.rds"))
 sce_paralogs <- readRDS(here("chapters", "sce_paralogs.rds"))
-```
-
-Boxplots showing the distribution of Ka/Ks ratios across different gene duplication types
-***Boxplot will not be used***
-Excluded the Ka/Ks comparison as our core focus is on cell-type-specific expression dynamics.
-```{}
-output_dir <- here("products", "plots")
-file_name <- "Ka_Ks_boxplot_valid.png"
-full_path <- file.path(output_dir, file_name)
-
-df_pairs <- dup_list_valid$pairs
-
-my_colors <- c("DD" = "#9ecae1",
-               "SD" = "#a1d99b",
-               "dTRD" = "#fdbb84",
-               "PD" = "#bcbddc",
-               "rTRD" = "#d77fb3",
-               "TD" = "#9e9ac8")
-
-median_data <- df_pairs %>%
-  group_by(type) %>%
-  summarise(median_val = median(Ka_Ks, na.rm = TRUE)) %>%
-  mutate(median_txt = sprintf("%.4f", median_val))
-
-p <- ggplot(df_pairs, aes(x = type, y = Ka_Ks, fill = type)) +
-  geom_boxplot(width = 0.6, outlier.alpha = 0.3) +
-  
-  scale_fill_manual(values = my_colors) +
-  
-  scale_y_continuous(breaks = seq(0, 6, by = 1)) +
-  coord_cartesian(ylim = c(0, 6)) +
-
-  theme_classic() +
-  
-  labs(title = "Ka/Ks Distribution by Type",
-       x = "Duplication Type",
-       y = "Ka/Ks Ratio") +
-  
-  theme(
-      legend.position = "none",
-      plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
-      
-      axis.title.x = element_text(size = 14, face = "bold", margin = margin(t = 10)),
-      axis.title.y = element_text(size = 14, face = "bold", margin = margin(r = 10)),
-      
-      axis.text = element_text(color = "black", size = 12)
-    )
-
-ggsave(filename = full_path, plot = p, width = 8, height = 6, dpi = 300)
 ```
 
 - counts: raw counts 
@@ -124,7 +76,7 @@ Calculate the sum and mean expression level for all genes across samples.
 dup_genes <- dup_list_valid$genes
 # dup_genes: 28902 x 2 (gene, type)
 
-# sum across all samples
+# sum across all samples --> all cells i think? 
 expr_sum <- rowSums(logcounts(sce_paralogs), na.rm = TRUE)
 
 expr_sum_df <- tibble::tibble(
@@ -250,7 +202,7 @@ ggsave(
 ```
 
 ## 2.3 Expression breadths of duplicated genes
-Expression breadths (the number of tissues in which a gene is expressed) are calculated for Zea mayse duplicate genes, and the differences in expression breadth by duplication mode are compared using Kruskal-Wallis and Dunn's post-hoc tests.
+Expression breadths (the number of tissues in which a gene is expressed) are calculated for Zea mays duplicate genes, and the differences in expression breadth by duplication mode are compared using Kruskal-Wallis and Dunn's post-hoc tests.
 
 Helpter function to calculate the proportion of cells in which each gene is detected for each cell type. This will be used to assess expression breadth across cell types.
 ```{r}
@@ -344,10 +296,4 @@ ggsave(
   dpi    = 300
 )
 ```
-# 2.4 Frequency of duplicated genes by duplication mode
-```{r}
-
-```
-
-
 
