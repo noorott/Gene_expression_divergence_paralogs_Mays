@@ -25,11 +25,11 @@ library(SingleCellExperiment)
 
 zma_allgenes.tsv contains a list of all paralog genes of zea mays and their duplication type.
 zma_allpairs.tsv contains a list of all the paralog **pairs**, as well as info on the duplication type, age (ks/ka) and if possible, the age group (there were two peaks of gene duplication in the evolutionary history of zea mays corresponding to two WGD events)
-
 ```{r, message=FALSE}
 paralog_genes <- read_tsv(here("Duplication_data", "zma_allgenes.tsv"))
 paralog_pairs <- read_tsv(here("Duplication_data", "zma_allpairs.tsv"))
 ```
+
 Combine these 2 into 1 object
 ```{r}
 duplication_info <- list(genes = paralog_genes,
@@ -49,12 +49,14 @@ head(duplication_info$pairs, 5)
 head(duplication_info$genes, 5)
 ```
 
+
 ## 1.3 Load Zea Mays data
 
 Load in the single cell sequencing data obtained from chapter 1. 
 ```{r}
 summarized_sce <- readRDS(here("chapters","summarized_sce.rds"))
 ```
+
 
 ## 1.4 Check gene ID compatibility
 
@@ -63,6 +65,7 @@ Extract gene IDs used in the single cell experiment
 sceIDs <- rownames(summarized_sce)
 head(sceIDs)
 ```
+
 It contains a mixed annotation set with different ID types:
 - Zm00001dxxxxx: these are standard nuclear protein-coding genes, the d
 - ENSRNAxxxxxxxxx: RNA gene IDs, often non coding RNAs, but also predicted transcripts
@@ -74,11 +77,11 @@ It contains a mixed annotation set with different ID types:
 The d in Zm00001dxxxxx means that the IDs are in genome version V4
 
 We will only analyse nuclear protein-coding genes, so IDs starting with Zm00 are extracted
-
 ```{r}
 sceIDs <- sceIDs[grep("Zm00", sceIDs)]
 length(sceIDs)
 ```
+
 Retain 41856 genes (from the original 67300)
 ```{r}
 # Remove Zm00001d pattern and get the second part
@@ -90,15 +93,14 @@ Next we extract the gene IDs from the duplication data to check compatibility
 dupIDs <- duplication_info$genes$gene
 head(dupIDs)
 ```
+
 Here, all gene IDs are in the Zm00001ebxxxxx format; they are nuclear gene IDs from version 5. Gene IDs are thus not compatible. We will convert the IDs from the sce objects from version 4 to 5 with a conversion table.
 
 An ID conversion table is obtained from following website after supplying a file with the IDs from sceIDs:
 https://plants.ensembl.org/Zea_mays/Tools/IDMapper
-
 ```{r}
 writeLines(sceIDs, here("Duplication_data", "Zma_nuclearcoding_geneIDs.txt"))
 ```
-
 
 Read in and clean the conversion file 
 - remove unneeded duplicate rows
@@ -138,6 +140,7 @@ final_IDmatch <- id_conversionTable %>%
 head(final_IDmatch)
 unique(final_IDmatch$valid) 
 ```
+
 ```{r}
 # Count valid matches 
 cat("\nNumber of valid (mappable) genes:", sum(final_IDmatch$valid), "\n")
@@ -150,12 +153,15 @@ cat("\nNumber of conversion IDs matching sce IDs:",
 cat("\nNumber of conversion IDs matching dup IDs:", 
     sum(final_IDmatch$match_dup), "of", nrow(final_IDmatch), "\n")
 ```
-Of the 32927 gene IDs present in the ID conversion table, all are present in the sce object. However, 3458 are not present in the dup list
-Eli: probably just genes which are not a duplicate so no problem?
+
+Of the 32927 gene IDs present in the ID conversion table, all are present in the sce object. 
+These 3458 unmatched genes are singletons and are correctly excluded, as this analysis focuses on paralog pairs only.
+
 
 ## 1.5 Create paralog sce objects
 
-Next we create new sce objects with the expression data, but only for the genes which can be linked to the duplicate information (sce object only with paralogs). V3 IDs will also be converted to V4
+Next we create new sce objects with the expression data, but only for the genes which can be linked to the duplicate information (sce object only with paralogs). 
+V3 IDs will also be converted to V4
 ```{r}
 # save the rows with gene IDs that are both in the dup ID list and the sce ID list
 valid_matches <- final_IDmatch %>% 
@@ -191,7 +197,6 @@ all(rownames(sce_paralogs) == valid_matches$Old_Cleaned)
 rownames(sce_paralogs) <- valid_matches$New_Cleaned
 ```
 
-
 The file with paralog information is also filtered to contain only the gene IDs which are present in our sce objects and that could get converted with the conversion table
 ```{r}
 # Create filtered version of duplication_info
@@ -207,9 +212,17 @@ duplication_info_filtered$pairs <- duplication_info$pairs %>%
   filter(trimws(dup1) %in% valid_dup_ids & trimws(dup2) %in% valid_dup_ids)
 ```
 
+*summarized_sce_paralogs*: Pseudobulk-aggregated expression per spatial region, used for differential expression testing with DESpace.
+*sce_paralogs*: Cell-level expression data, used for visualization and exploration of within-region heterogeneity.
+
+
 ## 1.6 Saving
 
 Final objects are saved for later use
+*summarized_sce_paralogs.rds*: the summarized single cell experiment object with only the genes which can be linked to the duplication information
+*sce_paralogs.rds*: the non-summarized single cell experiment object with only the genes which can be linked to the duplication information
+*duplication_info.rds*: the original duplication information as obtained from the data source
+*duplication_info_filtered.rds*: the duplication information filtered to only contain the genes which can be linked to the genes in our single cell experiment objects 
 ```{r}
 saveRDS(summarized_sce_paralogs, here("chapters", "summarized_sce_paralogs.rds"))
 saveRDS(sce_paralogs, here("chapters", "sce_paralogs.rds"))
@@ -217,17 +230,6 @@ saveRDS(duplication_info, here("Duplication_data", "duplication_info.rds"))
 saveRDS(duplication_info_filtered, here("Duplication_data", "duplication_info_filtered.rds"))
 ```
 
-
-QUESTIONS
-- can use other gene types besides nuclear coding?
-- loss of 10k genes when constructing ID conversion table normal
-
 ```{r}
 sessionInfo()
 ```
-
-
-
-
-
-
