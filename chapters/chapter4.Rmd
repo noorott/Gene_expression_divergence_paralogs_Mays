@@ -54,7 +54,7 @@ Read in the SingleCellExperiment created in chapter1
 We need to do metacell aggregation to reduce noise in the data.
 We do this using the SuperCell package.
 
-# 1 Create the metacells
+## 4.1 Create the metacells
 
 ! You only have to run this once, if you already created the metacell_sce.rds file: go to 2
 
@@ -93,7 +93,7 @@ colData(metacell_sce)$celltype <- sc$SC.cell.annotation. ## Add annotation cellt
 saveRDS(metacell_sce, here("chapters", "metacell_sce.rds"))
 ```
 
-# 2. Comparing distributions of gene-gene correlations by duplication mode
+## 4.2 Comparing distributions of gene-gene correlations by duplication mode
 
 read in the metacells and duplication data
 ```{r}
@@ -242,7 +242,7 @@ p_heatmap_rho
 POAC WGD: happened ∼53 MYA
 ZEAM WGD: happened ∼16 MYA 
 
-# 3. Fisher's z-transformed rho across the dataset
+## 4.3 Fisher's z-transformed rho across the dataset
 
 we compute the Fisher's z-transformed rho per pair and visualise the
 distribution by duplication mode. 
@@ -394,7 +394,7 @@ p_rho_ks_zma <- mean_rho_zma |>
 p_rho_ks_zma
 ```
 
-## Expression divergence by gene family
+## 5.4 Expression divergence by gene family
 
 Here, we will explore how duplicates in each gene family diverge, looking
 for families that tend to have more similar expression profiles (i.e., less
@@ -520,8 +520,7 @@ sea <- lapply(sp, function(x) {
 Logically the high correlation genes should be the most important and
 fundamental functions. Check this in the sea object!!
 
-# 5. Saving objects
-
+## Saving figures 
 ```{r}
 # Save plots as PNG
 ggsave(
@@ -555,3 +554,6 @@ ggsave(
 )
 ```
 
+```{r}
+sessionInfo()
+```
