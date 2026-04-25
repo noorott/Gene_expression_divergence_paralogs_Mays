@@ -7,7 +7,7 @@ execute:
   warning: false
 ---
 
-# Expression divergence between duplicate pairs
+# 4 Expression divergence between duplicate pairs
 
 In this chapter, we will explore expression divergence between duplicate
 pairs using different metrics to investigate if there is biased divergence
@@ -54,7 +54,7 @@ Read in the SingleCellExperiment created in chapter1
 We need to do metacell aggregation to reduce noise in the data.
 We do this using the SuperCell package.
 
-# 1 Create the metacells
+# 4.1 Create the metacells
 
 ! You only have to run this once, if you already created the metacell_sce.rds file: go to 2
 
@@ -93,7 +93,7 @@ colData(metacell_sce)$celltype <- sc$SC.cell.annotation. ## Add annotation cellt
 saveRDS(metacell_sce, here("chapters", "metacell_sce.rds"))
 ```
 
-# 2. Comparing distributions of gene-gene correlations by duplication mode
+# 4.2 Comparing distributions of gene-gene correlations by duplication mode
 
 read in the metacells and duplication data
 ```{r}
@@ -242,7 +242,7 @@ p_heatmap_rho
 POAC WGD: happened ∼53 MYA
 ZEAM WGD: happened ∼16 MYA 
 
-# 3. Fisher's z-transformed rho across the dataset
+# 4.3 Fisher's z-transformed rho across the dataset
 
 we compute the Fisher's z-transformed rho per pair and visualise the
 distribution by duplication mode. 
@@ -312,7 +312,7 @@ p_zrho
 
 Older duplicates consistently display higher expression divergence, in line with findings from previous studies. Duplication mode also plays a clear role in the recent duplicates: in maize, paralogs show the greatest expression divergence among recent duplicates, for example in SD, TD, and dTRD. This contrasts with previous work, where duplication modes that preserve cis-regulatory landscapes — such as WGD and TRD — were associated with lower expression divergence compared to modes that disrupt them.
 
-# 4. Expression divergence over time
+# 4.4 Expression divergence over time
 
 Here, we explore how gene-gene correlations change over time using $K_s$ as
 a proxy for time. We use Fisher's z-transformed Spearman's $\rho$ and fit
@@ -394,7 +394,7 @@ p_rho_ks_zma <- mean_rho_zma |>
 p_rho_ks_zma
 ```
 
-## Expression divergence by gene family
+## 4.5 Expression divergence by gene family
 
 Here, we will explore how duplicates in each gene family diverge, looking
 for families that tend to have more similar expression profiles (i.e., less
@@ -520,7 +520,7 @@ sea <- lapply(sp, function(x) {
 Logically the high correlation genes should be the most important and
 fundamental functions. Check this in the sea object!!
 
-# 5. Saving objects
+# 4.6 Saving objects
 
 ```{r}
 # Save plots as PNG
