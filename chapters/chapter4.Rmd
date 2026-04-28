@@ -49,15 +49,14 @@ dup_pal <- c(
 bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
 ```
 
-Read in the SingleCellExperiment created in chapter1
-
 We need to do metacell aggregation to reduce noise in the data.
 We do this using the SuperCell package.
 
 ## 4.1 Create the metacells
 
-! You only have to run this once, if you already created the metacell_sce.rds file: go to 2
+! You only have to run this once, if you have  already created the metacell_sce.rds file: go to 5.2
 
+Read in the SingleCellExperiment
 ```{r}
 sce <- readRDS(here("chapters", "sce_paralogs.rds"))
 ```
@@ -76,6 +75,7 @@ max(sc$membership)
 ```
 We have aggregated 228 359 singlecells into 18 196 metacells
 
+Create a new sce object containing the metacells 
 ```{r}
 metacell_logcounts <- supercell_GE(
   ge = assay(sce, "logcounts"),
@@ -102,16 +102,9 @@ metacell_sce <- readRDS(here("chapters", "metacell_sce.rds"))
 
 ```{r}
 paralog_pairs <- readRDS(here("Duplication_data", "duplication_info_filtered.rds"))
-
-paralog_pairs$pairs %>%
-     distinct(peak_name)
-```
-Filter out paralogue pairs with peak_name is NA
-```{r}
-paralog_pairs$pairs <- paralog_pairs$pairs[!is.na(paralog_pairs$pairs$peak_name), ]
 ```
 
-
+Calculate the Spearmann coëfficiënt of each paralog pair based on the expression profiles over the metacells
 ```{r}
 # Create a dataframe containing only the duplicated pairs and their type
 dups <- as.data.frame(paralog_pairs$pairs[, c("dup1", "dup2", "type")])
@@ -136,10 +129,8 @@ sp_coeff <- sp_coeff %>%
 ```
 
 
-Next, for each sample, we will test for significant differences by 
-duplication mode using Kruskal-Wallis tests followed by a post-hoc Dunn's test. 
-To account for differences in ages between gene pairs, we will do this 
-separately for each age group.
+Next, we will test for significant different distributions by duplication mode using Kruskal-Wallis tests followed by a post-hoc Dunn's test.
+To account for differences in ages between gene pairs, we will do this separately for each age group.
 
 ```{r}
 # Ad all info to the correlation dataframe
@@ -148,12 +139,9 @@ sp_coeff_age <- dplyr::inner_join(paralog_pairs$pairs, sp_coeff, by = c("dup1", 
 # This way we will only have 1 type column in the result
 ```
 
-Kruskal-Wallis test is a non-parametric statistical test to test for significant
-differences between multiple groups.The test is based on the ranks of the data.
-It is an extension of the Mann-Whitney-Wilcoxon test (only appropriate to compare 2 distr.)
+Kruskal-Wallis test is a non-parametric statistical test to test for significant differences between multiple groups.The test is based on the ranks of the data. It is an extension of the Mann-Whitney-Wilcoxon test (only appropriate to compare 2 distr.)
 
-Post-hoc Dunnn test is used after the Kruskal-Wallis test to calculate wether the 
-pairwise differences in average rank is significant.
+Post-hoc Dunnn test is used after the Kruskal-Wallis test to calculate whether the pairwise differences in average rank is significant.
 
 ```{r}
 # Credits to Fabricio Almeida Silva 
@@ -205,19 +193,14 @@ compare_cors <- function(rho_df) {
 ```
 
 ```{r, warning= FALSE, message=FALSE}
-comp_cors <- compare_cors(sp_coeff_age) |> mutate(species = "Zma")
-```
-
-```{r}
-# we add a dummy "sample" column so that the downstream compare_cors()
-# function — which was written for multi-sample spatial data — works unchanged.
-comp_cors$sample <- "Zma_metacell"
+comp_cors <- compare_cors(sp_coeff_age |>
+    filter(!is.na(peak_name)))
 ```
 
 ```{r}
 # Plot heatmap with CLDs
 p_heatmap_rho <- comp_cors |>
-    mutate(Group = factor(Group, levels = rev(names(dup_pal)))) |>
+    mutate(Group = factor(Group, levels = names(dup_pal))) |>
     ggplot(aes(x = peak_name, y = Group, fill = Letter)) +
     geom_tile(color = "gray90", linewidth = 0.8, alpha = 0.7) +
     geom_text(aes(label = Letter), size = 3) +
@@ -249,13 +232,13 @@ distribution by duplication mode.
 
 Why we use this transformation:
 When the Pearson correlation coëfficiënt is near -1/1 the distribution of the coëfficiënt is 
-skewed. By applying the z-tranformation we compensate this affect and the 
-distribution will become more normal.
+skewed. By applying the z-tranformation we compensate this effect and the distribution will become more normal.
 
 ```{r}
 # Get mean Fisher's Z-transformed rho estimates
 
 zrho <- sp_coeff_age |>
+    filter(!is.na(peak_name))|>
     mutate(
         cor = 0.5 * log((1 + cor) / (1 - cor)),  # Fisher's z-transformation
         pair = str_c(dup1, dup2, sep = "_"),
@@ -310,8 +293,6 @@ p_zrho <- zrho |>
 p_zrho
 ```
 
-Older duplicates consistently display higher expression divergence, in line with findings from previous studies. Duplication mode also plays a clear role in the recent duplicates: in maize, paralogs show the greatest expression divergence among recent duplicates, for example in SD, TD, and dTRD. This contrasts with previous work, where duplication modes that preserve cis-regulatory landscapes — such as WGD and TRD — were associated with lower expression divergence compared to modes that disrupt them.
-
 # 4. Expression divergence over time
 
 Here, we explore how gene-gene correlations change over time using $K_s$ as
@@ -319,7 +300,7 @@ a proxy for time. We use Fisher's z-transformed Spearman's $\rho$ and fit
 both a linear (`lm(zrho ~ Ks)`) and a log-linear (`lm(zrho ~ log(Ks))`)
 model to determine which better describes the relationship.
 ```{r}
-# Get Fisher's Z-transformed rho for all duplicates, filtered to Ks < 3
+# Get Fisher's Z-transformed rho for all duplicates
 mean_rho_zma <- sp_coeff_age |>
     filter(Ks < 3) |>
     mutate(
@@ -459,6 +440,7 @@ p_zrho_fam
 ```
 ```{r}
 go_annot <- readRDS(here("Duplication_data", "functional_annotation.rds"))
+go_annot <- go_annot$Zma
 ```
 
 
@@ -474,76 +456,51 @@ top10_low <- fams_ranked |>
 
 # Perform overrepresentation analyses
 sp <- names(go_annot)
-sea <- lapply(sp, function(x) {
     
-    ## Get top 10% families (highest and lowest correlations)
-    t10_high <- top10_high |>
-        pull(family)
-    
-    t10_low <- top10_low |>
-        pull(family)
-    
-    ## Get gene sets
-    genes_high <- fams |>
-        filter(family %in% t10_high) |>
-        pull(gene)
-    
-    genes_low <- fams |>
-        filter(family %in% t10_low) |>
-        pull(gene)
-    
-    ## Perform SEA
-    bg <- zrho_fams 
-    bg <- unique(c(bg$dup1, bg$dup2))
-    
-    df_high <- HybridExpress::ora(
-        genes = genes_high,
-        annotation = as.data.frame(go_annot[[x]]),
-        background = bg
-    ) |>
-        mutate(category = "highcor")
-    
-    df_low <- HybridExpress::ora(
-        genes = genes_low,
-        annotation = as.data.frame(go_annot[[x]]),
-        background = bg
-    ) |>
-        mutate(category = "lowcor")
-    
-    final_df <- bind_rows(df_high, df_low)
-    
-    return(final_df)
-}) |>
-    bind_rows()
-```
+## Get top 10% families (highest and lowest correlations)
+t10_high <- top10_high |>
+    pull(family)
 
-Logically the high correlation genes should be the most important and
-fundamental functions. Check this in the sea object!!
+t10_low <- top10_low |>
+    pull(family)
+
+## Get gene sets
+genes_high <- fams |>
+    filter(family %in% t10_high) |>
+    pull(gene)
+
+genes_low <- fams |>
+    filter(family %in% t10_low) |>
+    pull(gene)
+
+bg <- zrho_fams 
+bg <- unique(c(bg$dup1, bg$dup2))
+
+df_high <- HybridExpress::ora(
+    genes = genes_high,
+    annotation = as.data.frame(go_annot),
+    background = bg
+) |>
+    mutate(category = "highcor")
+
+df_low <- HybridExpress::ora(
+    genes = genes_low,
+    annotation = as.data.frame(go_annot),
+    background = bg
+) |>
+    mutate(category = "lowcor")
+
+sea <- bind_rows(df_high, df_low)
+
+bind_rows()
+```
 
 ## Saving figures 
 ```{r}
 # Save plots as PNG
 ggsave(
-    filename = here("plots_and_figures", "heatmap_rho_cld_zma.png"),
-    plot     = p_heatmap_rho,
-    width    = 9, height = 3, dpi = 300
-)
-
-ggsave(
-    filename = here("plots_and_figures", "zrho_by_dupmode_zma.png"),
-    plot     = p_zrho,
-    width    = 8, height = 3, dpi = 300
-)
-
-ggsave(
     filename = here("plots_and_figures", "expression_divergence_over_time_zma.png"),
     plot     = p_rho_ks_zma,
-    width    = 9, height = 4, dpi = 300
-)
-
-ggsave(
-    filename = here("plots_and_figures", "correlation_per_gene_family.png"),
-    plot     = p_zrho_fam,
     width    = 9, height = 4, dpi = 300
 )
 
