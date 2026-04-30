@@ -30,20 +30,6 @@ chapters/summarized_sce.rds
 chapters/metacell_sce.rds
 chapters/gene_families.rds
 
-Duplication_data/duplication_info
-Duplication_data/duplication_info_filtered
-Duplication_data/Zma_nuclearcoding_geneIDs.txt
-Duplication_data/duplication_info_filtered.rds
-Duplication_data/duplication_info.rds
-Duplication_data/Zma_idConverter_nuclearCoding.txt
-Duplication_data/Zma_idConverter_nuclearCoding.txt
-Duplication_data/dup_list.rds
-Duplication_data/dup_list_valid
-Duplication_data/final_IDmatch.rds
-Duplication_data/pairs_by_age_group_expanded.rds
-Duplication_data/zma_ID_converter.txt
-Duplication_data/functional_annotation.rds
-
 data
 products
 products.zip
