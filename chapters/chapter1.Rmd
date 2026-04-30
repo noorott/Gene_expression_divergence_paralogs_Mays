@@ -30,6 +30,7 @@ library(ragg) #to save plots
 library(PCAtools)
 library(flextable)
 library(stringr)
+library(igraph)
 ```
 
 ```{r}
@@ -693,20 +694,20 @@ sce_copy <- sce
 
 ## 1.6 Batch correction
 
-batch correction options:
+Possible batch correction methods:
 
 - **linear modelling**,eg removeBatchEffect from limma, regressBatches from batchelor):
-fits linear model through gene expression profile with batch term and then recomputing the observations without the batch effect
-not good because assumes that composition of cell subpopulations is the same across batches
-
+fits linear model through gene expression profile with batch term and then recomputing the observations without the batch effect.
+Assumes that composition of cell subpopulations is the same across batches
 
 - **rescaleBatches** from batchelor
-roughly equivalent to applying linear regression, also assumes constant composition -> not good
+roughly equivalent to applying linear regression, also assumes constant composition.
 
 - **MNN correction**, eg fastMNN from batchelor
-Finds nearest neighbor cell pairs between different batches --> assumes these cells are from the same biological state. Batch effect is estimated by the difference between these nearest neighbors. Does not assume that the population composition is the same or known beforehand. Key assumption is that the batch effect is orthogonal to the biology, usually reasonable as random vector is likely orthogonal --> could also be good option, but I am not sure if its a problem for this algorithm that not all celltypes are present in all datasets
+Finds nearest neighbor cell pairs between different batches. Assumes these cells are from the same biological state. Batch effect is estimated by the difference between these nearest neighbors. Does not assume that the population composition is the same or known beforehand. Key assumption is that the batch effect is orthogonal to the biology, usually reasonable as random vector is likely orthogonal --> could also be good option, but I am not sure if its a problem for this algorithm that not all celltypes are present in all datasets
 
 
+### 1.6.1 Explore data to determine optimal batch correction method
 Visualisation of overlap
 ```{r}
 #table that counts the datasets containing a certain celltype 
@@ -737,7 +738,7 @@ dataset_pairs <- expand_grid(
   Dataset_1 = unique(cell_types_long$Dataset),
   Dataset_2 = unique(cell_types_long$Dataset)
 ) |>
-  filter(Dataset_1 < Dataset_2)  # vermijd dubbele & zelf-comparisons
+  filter(Dataset_1 < Dataset_2)  # avoid dubbel & zelf-comparisons
 
 pairwise_overlap <- dataset_pairs |>
   rowwise() |>
@@ -771,7 +772,6 @@ save_as_docx(ft_pairs, path = "pairwise_dataset_overlap.docx")
 ft_pairs
 ```
 ```{r}
-library(igraph)
 g <- graph_from_data_frame(
   pairwise_overlap |>
     filter(Overlap) |>
@@ -810,21 +810,25 @@ dataset_in_overlap_set <- tibble(
 
 dataset_in_overlap_set
 ```
-Transitive connectivity between datasets is sufficient, meaning that not every dataset pair is required to share a cell type directly, as long as all datasets are connected through a chain of overlapping cell types. The assumption of overlap between datasets is met, we can do MNN
+Transitive connectivity between datasets is sufficient, meaning that not every dataset pair is required to share a cell type directly, as long as all datasets are connected through a chain of overlapping cell types. The assumption of overlap between datasets is met, we can do MNN.
 
-## Batch correction with MNN
-start from uncorrected sce again, or work with counts in corrected sce 
-- Compared to linear regression, MNN correction does not assume that the population composition is the same or known beforehand. This is because it learns the shared population structure via identification of MNN pairs and uses this information to obtain an appropriate estimate of the batch effect.
-- Consider a cell a in batch A, and identify the cells in batch B that are nearest neighbors to a in the expression space defined by the selected features. Repeat this for a cell b in batch B, identifying its nearest neighbors in A. Mutual nearest neighbors are pairs of cells from different batches that belong in each other’s set of nearest neighbors. The reasoning is that MNN pairs represent cells from the same biological state prior to the application of a batch effect 
-- key assumption: the batch effect is orthogonal to the biology in high-dimensional expression space.
-- The most relevant parameter for tuning fastMNN() is k, which specifies the number of nearest neighbors to consider when defining MNN pairs. This can be interpreted as the minimum anticipated frequency of any shared cell type or state in each batch. Increasing k will generally result in more aggressive merging as the algorithm is more generous in matching subpopulations across batches. It can occasionally be desirable to increase k if one clearly sees that the same cell types are not being adequately merged across batches.
-- In the specific case of MNN correction, we can also set auto.merge=TRUE to allow it to choose the “best” order in which to perform the merges. This is slower but can occasionally be useful when the batches involved have very different cell type compositions.
+## 1.6.2 Batch correction with MNN
+
+Compared to linear regression, MNN correction does not assume that the population composition is the same or known beforehand. This is because it learns the shared population structure via identification of MNN pairs and uses this information to obtain an appropriate estimate of the batch effect.
+
+Consider a cell a in batch A, and identify the cells in batch B that are nearest neighbors to a in the expression space defined by the selected features. Repeat this for a cell b in batch B, identifying its nearest neighbors in A. Mutual nearest neighbors are pairs of cells from different batches that belong in each other’s set of nearest neighbors. The reasoning is that MNN pairs represent cells from the same biological state prior to the application of a batch effect 
+
+Key assumption: the batch effect is orthogonal to the biology in high-dimensional expression space.
+
+The most relevant parameter for tuning fastMNN() is k, which specifies the number of nearest neighbors to consider when defining MNN pairs. This can be interpreted as the minimum anticipated frequency of any shared cell type or state in each batch. Increasing k will generally result in more aggressive merging as the algorithm is more generous in matching subpopulations across batches. It can occasionally be desirable to increase k if one clearly sees that the same cell types are not being adequately merged across batches.
+
+In the specific case of MNN correction, we can also set auto.merge=TRUE to allow it to choose the “best” order in which to perform the merges. This is slower but can occasionally be useful when the batches involved have very different cell type compositions.
 
 the fastMNN() function performs PCA to reduce the dimensions beforehand and speed up the downstream neighbor detection steps.
 
+This again may time some time, if you already ran the batchcorrection once, just read in the saved .rds file.
 ```{r}
 set.seed(1000101001)
-#read in file, can take long
 if (FALSE) {mnn.out <- fastMNN(assay(sce_copy, 'counts'), 
                                batch = sce_copy$Dataset, d=50, k=20, subset.row=chosen.hvgs,
                                BSPARAM=BiocSingular::RandomParam(deferred=TRUE), 
@@ -833,11 +837,8 @@ if (FALSE) {mnn.out <- fastMNN(assay(sce_copy, 'counts'),
 } else {
   mnn.out <- readRDS("corrected_mnn.rds")
 }
-
-#hier wil je de assay uit mnn.out in sce_copy krijgen om daar dan de TSNE op te laten lopen
-#assay(sce_copy, "reconstructed") <- assay(mnn.out$reconstructed) 
 ```
---> not possible to put the assay of mnn.out in sce_copy because the dimensions are not the same and when making a new singleCellExperiment, you get 57.3GB, so not possible 
+
 
 ```{r}
 if (FALSE) {
@@ -874,15 +875,6 @@ TSNE_df2_mnn <- data.frame(
 )
 ```
 
-```{r}
-if (FALSE) {
-  saveRDS(TSNE_df2_mnn, file = "TSNE_df2_mnn.rds")
-} else {
-  TSNE_df2_mnn <- readRDS("TSNE_df2_mnn.rds")
-}
-```
-
-
 plot to check that celltypes cluster together   
 ```{r}
 tsne_batchcormnn_dataset <- TSNE_df2_mnn %>%
@@ -908,10 +900,12 @@ tsne_batchcormnn_celltype <- TSNE_df2_mnn %>%
       legend.key.size = unit(0.3, "cm")) +
   theme(legend.position = "none") + 
   ggtitle("Coloured by celltype")
-if (FALSE) {outfile <- file.path(out_dir, paste0("tsne_batchcormnn_dataset", ".png"))
+
+# Save plots
+outfile <- file.path(out_dir, paste0("tsne_batchcormnn_dataset", ".png"))
 ggsave(outfile, tsne_batchcormnn_dataset)
 outfile <- file.path(out_dir, paste0("tsne_batchcormnn_celltype", ".png"))
-ggsave(outfile, tsne_batchcormnn_celltype)}
+ggsave(outfile, tsne_batchcormnn_celltype)
 c(tsne_batchcormnn_dataset, tsne_batchcormnn_celltype)
 ```
 
@@ -943,10 +937,12 @@ tsne_batchcormnn_leaf_celltype <- TSNE_df2_mnn %>%
     ) +
   theme(legend.position = "none") + 
   ggtitle("Coloured by celltype")
-if (FALSE) {outfile <- file.path(out_dir, paste0("tsne_batchcormnn_leaf_dataset", ".png"))
+
+# Save plots
+outfile <- file.path(out_dir, paste0("tsne_batchcormnn_leaf_dataset", ".png"))
 ggsave(outfile, tsne_batchcormnn_leaf_dataset)
 outfile <- file.path(out_dir, paste0("tsne_batchcormnn_leaf_celltype", ".png"))
-ggsave(outfile, tsne_batchcormnn_leaf_celltype)}
+ggsave(outfile, tsne_batchcormnn_leaf_celltype)
 c(tsne_batchcormnn_leaf_dataset, tsne_batchcormnn_leaf_celltype)
 ```
 
@@ -981,22 +977,18 @@ tsne_batchcormnn_root_celltype <- TSNE_df2_mnn %>%
   theme(legend.position = "none") + 
   ggtitle("Coloured by celltype")
 
-if (TRUE){outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_dataset", ".png"))
+# Save plots
+outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_dataset", ".png"))
 ggsave(outfile, tsne_batchcormnn_root_dataset)
 outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_celltype", ".png"))
-ggsave(outfile, tsne_batchcormnn_root_celltype)}
+ggsave(outfile, tsne_batchcormnn_root_celltype)
 c(tsne_batchcormnn_root_dataset, tsne_batchcormnn_root_celltype)
 ```
 
-
-##################
-## Data summary ##
-##################
+## 1.7 Data summary 
 
 We will summarize the data across cell type and organ, enabling further analysis.
 
-
-As the quality of batch correction was not satisfactory, we will work further with uncorrected counts. This will have to be taken into account in subsequent analysis.
 ```{r}
 sce <- readRDS("uncorrected_sce_RedDim.rds")
 ```
@@ -1045,27 +1037,13 @@ summarized_sce <- aggregateAcrossCells(
   store.number = "ncells")                   # store number of cells 
 ```
 
-Save as RDS
+Save objects for further analysis as RDS
 ```{r}
 saveRDS(sce, "uncorrected_sce.rds")
 ```
 ```{r}
 saveRDS(summarized_sce, file = "summarized_sce.rds")
 ```
-
-
-TO DO: 
-- investigate what n_experiments is (see line 56), if these are multiple samples within each dataset we might have to correct for batch effects within each dataset aswell?
-
-
-- additional data visualization plots?
-- within dataset quality control plots (doublets, low quality droplets); see tutorial or stat genomics
-- tidy code and comments
-
-
-QUESTIONS:
-
-
 
 ```{r}
 sessionInfo()
