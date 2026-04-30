@@ -439,7 +439,6 @@ p_zrho_fam
 ```
 ```{r}
 go_annot <- readRDS(here("Duplication_data", "functional_annotation.rds"))
-go_annot <- go_annot$Zma
 ```
 
 
