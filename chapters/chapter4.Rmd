@@ -7,7 +7,7 @@ execute:
   warning: false
 ---
 
-# Expression divergence between duplicate pairs
+Expression divergence between duplicate pairs
 
 In this chapter, we will explore expression divergence between duplicate
 pairs using different metrics to investigate if there is biased divergence
@@ -386,7 +386,6 @@ correlations.
 ```{r}
 # Load gene family assignments from PLAZA
 fams <- readRDS(here("chapters","gene_families.rds"))
-fams <- fams |> filter(species == "zma")
 ```
 
 ```{r}
