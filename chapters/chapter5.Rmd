@@ -101,9 +101,34 @@ if (run_gcn) {
 }
 ```
 
+## 5.2 GCN exploration
 
-## 5.2 Hub genes and duplication mode
+```{r}
+gcn$genes_and_modules$Modules |> table()
+```
+The paralog genes were clustered into 3 different modules (MEgrey is a trash bin module). The overwhelming majority belong to the antiquewhite2 cluster.
+```{r}
+plot_dendro_and_colors(gcn)
+```
+It is evident that a lot of initial clusters were merged, indicating they had similar module eigenvectors.
 
+```{r}
+metadata_organ <- data.frame(sub(".*_", "", colnames(mat)))
+rownames(metadata_organ) <- colnames(mat)
+colnames(metadata_organ) <- "Organ"
+metadata_organ
+
+MEtrait_organ <- module_trait_cor(exp = mat, MEs = gcn$MEs, metadata = metadata_organ)
+plot_module_trait_cor(MEtrait_organ)
+```
+The antiquewhite2 module is characterized by higher expression levels in the shoot axis and relatively low expression in the flower. The darkgreen module has higher expression in the shoot axis as well, but is further characterized by relatively low expression in the root. The expression correlation across organs is less pronounced for the thistle module, with only a moderately high expression in roots. 
+
+```{r}
+net_stats(adj_matrix = gcn$adjacency_matrix,
+          net_type = "gcn")
+```
+
+## 5.3 Hub genes and duplication mode
 Extract hubs; groups of highly co-expressed genes
 ```{r}
 # Extract hubs,
