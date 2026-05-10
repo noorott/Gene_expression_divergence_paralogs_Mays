@@ -1,6 +1,6 @@
 ---
 title: "Chapter 5: network-based analysis"
-author: "Eli Galle"
+author: "Eli Galle, Emmeline Van Rijswijck"
 date: "`r Sys.Date()`"
 output: html_document
 ---
@@ -243,6 +243,9 @@ figure_ora <- ora_HubsDup |>
 figure_ora
 ```
 Paralogs produced by segmental duplication (SD) are significantly overrepresented in the hubs of the gene coexpression network.
+
+
+# additional underepresentation analysis
 
 Now we test for statistical underrepresentation
 ```{r}
