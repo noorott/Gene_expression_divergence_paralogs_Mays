@@ -104,6 +104,7 @@ if (run_gcn) {
 ## 5.2 GCN exploration
 
 ```{r}
+gcn$genes_and_modules |> nrow()
 gcn$genes_and_modules$Modules |> table()
 ```
 The paralog genes were clustered into 3 different modules (MEgrey is a trash bin module). The overwhelming majority belong to the antiquewhite2 cluster.
@@ -123,10 +124,6 @@ plot_module_trait_cor(MEtrait_organ)
 ```
 The antiquewhite2 module is characterized by higher expression levels in the shoot axis and relatively low expression in the flower. The darkgreen module has higher expression in the shoot axis as well, but is further characterized by relatively low expression in the root. The expression correlation across organs is less pronounced for the thistle module, with only a moderately high expression in roots. 
 
-```{r}
-net_stats(adj_matrix = gcn$adjacency_matrix,
-          net_type = "gcn")
-```
 
 ## 5.3 Hub genes and duplication mode
 Extract hubs; groups of highly co-expressed genes
@@ -150,6 +147,14 @@ hubs <- lapply(split(final_df, final_df$Modules), function(x) {
 # converting list with hub genes for each module into vector of all hub genes
 # don't need to know from which module they were, so unname
 hubs <- unname(unlist(hubs))
+```
+
+```{r}
+cat("Connectivity of hub genes:\n")
+gcn$kIN[gcn$genes_and_modules$Genes %in% hubs, ] |> pull(kWithin) |> summary() |> round(3)
+cat("\n")
+cat("Connectivity of non-hub genes:\n")
+gcn$kIN[!gcn$genes_and_modules$Genes %in% hubs, ] |> pull(kWithin) |> summary() |> round(3)
 ```
 
 Summarize number of (paralog) hub genes per duplication mode, compare with background frequency.
