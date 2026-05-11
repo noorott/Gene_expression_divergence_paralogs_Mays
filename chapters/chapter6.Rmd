@@ -327,9 +327,6 @@ if (TRUE) {ggsave(here("plots_and_figures", "combined_plot.png"),
        dpi = 300)}
 ```
 
-# Interpretation and conclusion
-
-
 
 ```{r}
 sessionInfo()
