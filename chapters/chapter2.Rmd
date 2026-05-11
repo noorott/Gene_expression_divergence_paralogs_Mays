@@ -217,11 +217,6 @@ saveRDS(duplication_info, here("Duplication_data", "duplication_info.rds"))
 saveRDS(duplication_info_filtered, here("Duplication_data", "duplication_info_filtered.rds"))
 ```
 
-
-QUESTIONS
-- can use other gene types besides nuclear coding?
-- loss of 10k genes when constructing ID conversion table normal
-
 ```{r}
 sessionInfo()
 ```
