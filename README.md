@@ -12,7 +12,7 @@ SingleCell data for *Zea mays* was obtained from the ScPlantDb.
 
 ### Chapter 1 — Data acquisition and preprocessing
 Download and preprocess *Z. mays* scRNA-seq datasets from scPlantDB. Includes
-data exploration, normalisation and batch correction. Pseudobulk logcounts by cell type and tissue.
+data exploration and normalisation. Pseudobulk logcounts by cell type and tissue.
 
 ### Chapter 2 — Duplication data integration
 Integrate paralog pair annotations and duplication mode classifications from
