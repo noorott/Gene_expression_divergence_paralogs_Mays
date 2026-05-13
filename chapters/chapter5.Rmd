@@ -215,11 +215,10 @@ figure_ora <- ora_HubsDup |>
     logP = -log10(padj),
     significant = ifelse(padj < 0.05, TRUE, FALSE),
     symbol = case_when(
-      padj > 0.05  ~ "",
-      padj > 0.01  ~ "*",
-      padj > 0.001 ~ "**",
-      !is.na(padj) ~ "***",
-      TRUE ~ NA_character_
+      padj < 0.05 & padj >= 0.01 ~ "*",
+      padj < 0.01 & padj >= 0.001 ~ "**",
+      padj < 0.001 ~ "***",
+      TRUE ~ ""
     )
   ) |> 
   ggplot(aes(x=genes, y=term)) +

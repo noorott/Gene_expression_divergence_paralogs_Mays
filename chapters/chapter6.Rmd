@@ -278,11 +278,10 @@ plot_data <- div_type_counts |>
   ) |>
   mutate(
     symbol = case_when(
-      padj > 0.05  ~ "",
-      padj > 0.01  ~ "*",
-      padj > 0.001 ~ "**",
-      !is.na(padj) ~ "***",
-      TRUE ~ NA_character_
+      padj < 0.05 & padj >= 0.01 ~ "*",
+      padj < 0.01 & padj >= 0.001 ~ "**",
+      padj < 0.001 ~ "***",
+      TRUE ~ ""
     )
   )
 plot_data
