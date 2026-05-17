@@ -1,6 +1,6 @@
 ---
 title: "Chapter 5: network-based analysis"
-author: "Eli Galle"
+author: "Eli Galle, Emmeline Van Rijswijck"
 date: "`r Sys.Date()`"
 output: html_document
 ---
@@ -101,9 +101,31 @@ if (run_gcn) {
 }
 ```
 
+## 5.2 GCN exploration
 
-## 5.2 Hub genes and duplication mode
+```{r}
+gcn$genes_and_modules |> nrow()
+gcn$genes_and_modules$Modules |> table()
+```
+The paralog genes were clustered into 3 different modules (MEgrey is a trash bin module). The overwhelming majority belong to the antiquewhite2 cluster.
+```{r}
+plot_dendro_and_colors(gcn)
+```
+It is evident that a lot of initial clusters were merged, indicating they had similar module eigenvectors.
 
+```{r}
+metadata_organ <- data.frame(sub(".*_", "", colnames(mat)))
+rownames(metadata_organ) <- colnames(mat)
+colnames(metadata_organ) <- "Organ"
+metadata_organ
+
+MEtrait_organ <- module_trait_cor(exp = mat, MEs = gcn$MEs, metadata = metadata_organ)
+plot_module_trait_cor(MEtrait_organ)
+```
+The antiquewhite2 module is characterized by higher expression levels in the shoot axis and relatively low expression in the flower. The darkgreen module has higher expression in the shoot axis as well, but is further characterized by relatively low expression in the root. The expression correlation across organs is less pronounced for the thistle module, with only a moderately high expression in roots. 
+
+
+## 5.3 Hub genes and duplication mode
 Extract hubs; groups of highly co-expressed genes
 ```{r}
 # Extract hubs,
@@ -125,6 +147,14 @@ hubs <- lapply(split(final_df, final_df$Modules), function(x) {
 # converting list with hub genes for each module into vector of all hub genes
 # don't need to know from which module they were, so unname
 hubs <- unname(unlist(hubs))
+```
+
+```{r}
+cat("Connectivity of hub genes:\n")
+gcn$kIN[gcn$genes_and_modules$Genes %in% hubs, ] |> pull(kWithin) |> summary() |> round(3)
+cat("\n")
+cat("Connectivity of non-hub genes:\n")
+gcn$kIN[!gcn$genes_and_modules$Genes %in% hubs, ] |> pull(kWithin) |> summary() |> round(3)
 ```
 
 Summarize number of (paralog) hub genes per duplication mode, compare with background frequency.
@@ -185,9 +215,9 @@ figure_ora <- ora_HubsDup |>
     logP = -log10(padj),
     significant = ifelse(padj < 0.05, TRUE, FALSE),
     symbol = case_when(
-      padj <= 0.05 & padj > 0.01 ~ "*",
-      padj <= 0.01 & padj > 0.001 ~ "**",
-      padj <= 0.001 ~ "***",
+      padj < 0.05 & padj >= 0.01 ~ "*",
+      padj < 0.01 & padj >= 0.001 ~ "**",
+      padj < 0.001 ~ "***",
       TRUE ~ ""
     )
   ) |> 
@@ -215,7 +245,72 @@ figure_ora
 Paralogs produced by segmental duplication (SD) are significantly overrepresented in the hubs of the gene coexpression network.
 
 
-Saving figure
+# additional underepresentation analysis
+
+Now we test for statistical underrepresentation
+```{r}
+# Custom underrepresentation test using Fisher's exact test (less alternative)
+ora_under <- do.call(rbind, lapply(unique(dup_genes$type), function(mode) {
+  
+  in_hubs_and_mode    <- sum(hubs %in% dup_genes$gene[dup_genes$type == mode])
+  in_hubs_not_mode    <- sum(hubs %in% dup_genes$gene[dup_genes$type != mode])
+  not_hub_and_mode    <- sum(!dup_genes$gene[dup_genes$type == mode] %in% hubs)
+  not_hub_not_mode    <- sum(!dup_genes$gene[dup_genes$type != mode] %in% hubs)
+  
+  mat <- matrix(c(in_hubs_and_mode, in_hubs_not_mode,
+                  not_hub_and_mode, not_hub_not_mode), nrow = 2)
+  
+  test <- fisher.test(mat, alternative = "less")  # "less" = underrepresentation
+  
+  data.frame(
+    term   = mode,
+    genes  = in_hubs_and_mode,
+    pval   = test$p.value
+  )
+}))
+
+# Adjust p-values for multiple testing
+ora_under$padj <- p.adjust(ora_under$pval, method = "BH")
+ora_under
+```
+```{r}
+ora_under <- ora_under[match(names(dup_pal), ora_under$term), ]
+
+figure_ora_under <- ora_under |>
+  mutate(
+    term = factor(term, levels = c("SD", "TD", "PD", "rTRD", "dTRD", "DD")),
+    logP = -log10(padj),
+    significant = ifelse(padj < 0.05, TRUE, FALSE),
+    symbol = case_when(
+      padj <= 0.05 & padj > 0.01  ~ "*",
+      padj <= 0.01 & padj > 0.001 ~ "**",
+      padj <= 0.001                ~ "***",
+      TRUE                         ~ ""
+    )
+  ) |>
+  ggplot(aes(x = genes, y = term)) +
+    geom_point(
+      aes(fill = term, size = logP, alpha = significant),
+      color = "gray20", pch = 21
+    ) +
+    scale_size(range = c(4, 9)) +
+    scale_alpha_manual(values = c(0.3, 1)) +
+    scale_fill_manual(values = dup_pal) +
+    geom_text(aes(label = symbol), vjust = -0.5, size = 5) +
+    scale_x_continuous(limits = c(0, 900)) +
+    theme_classic() +
+    guides(fill = "none", alpha = "none") +
+    labs(
+      title = "Underrepresentation of duplication modes in hub genes",
+      subtitle = "Bright dots with asterisks indicate significant underrepresentation; P <0.05",
+      x = "Number of hub genes", y = NULL,
+      size = expression(-Log[10] ~ italic(P))
+    )
+
+figure_ora_under
+```
+
+Saving figures
 ```{r}
 ggsave(here("plots_and_figures", "figure_ORA_DupMode_HubGenes2.png"), 
        figure_ora,

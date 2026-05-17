@@ -1,0 +1,304 @@
+---
+title: 'Chapter 3: Expression level and breadth across duplication modes'
+author: "Woowon Jang"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+In this chapter, we will compare the expression levels and expression breadths of duplicated genes by duplication mode. 
+We will use the duplication information obtained in chapter 2 and the single cell experiment object containing only paralog genes (sce_paralogs) to perform gene-level analyses.
+
+# 0 Environment settings
+```{r}
+library(here)
+
+set.seed(123) # for reproducibility
+options(timeout = 1e6) # to download large data files
+
+# Load helper functions
+here::i_am("chapters/chapter2.Rmd")
+#source(here("products", "code", "utils.R"))
+
+# Plot background
+bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
+```
+
+
+# 1 Gene level analysis
+## 1.1 Load packages
+```{r, warning=FALSE}
+library(rcompanion)
+library(scuttle)
+library(tidyverse)
+library(patchwork)
+library(HybridExpress)
+```
+
+Load data
+- duplication data made in chapter2 *duplication_info_filtered.rds*
+- list of paralogs from *uncorrected_sce.rds*
+```{r}
+dup_list_valid <- readRDS(here("Duplication_data", "duplication_info_filtered.rds"))
+sce_paralogs <- readRDS(here("chapters", "sce_paralogs.rds"))
+```
+
+The valid duplication info contains 28,902 genes with duplication mode information, which will be used for downstream analyses.
+- counts: raw counts 
+- logcounts: log-transformed normalized counts
+```{r}
+# Check assay names in the valid SpatialExperiment object
+assayNames(sce_paralogs)
+```
+
+Confirmed that the reconstructed assay is in a sparse matrix format for memory efficiency.
+```{r}
+# Check the reconstructed assay
+assay(sce_paralogs, "logcounts")[1:5, 1:5]
+```
+
+# 1.2 Expression levels of duplicated genes
+
+Set up a color palette for the different duplication modes to be used in plots.
+```{r}
+# Define color palette for duplication modes
+dup_pal <- c(
+    SD = "#000000",  
+    TD = "#E69F00",
+    PD = "#56B4E9",
+    rTRD = "#009E73",
+    dTRD = "#F0E442",
+    DD = "#0072B2"
+)
+```
+
+Calculate the mean expression level for all genes across samples.
+*Mean*: average expression per cell, allows fair comparison across genes regardless of cell count
+
+Both are joined with duplication type info for downstream comparison across duplication categories
+```{r}
+# Extract gene duplication information for valid genes
+dup_genes <- dup_list_valid$genes
+# dup_genes: 28902 x 2 (gene, type)
+
+# mean across all samples
+expr_mean <- rowMeans(logcounts(sce_paralogs), na.rm = TRUE)
+
+expr_mean_df <- tibble::tibble(
+  gene = names(expr_mean),
+  exp  = as.numeric(expr_mean)
+)
+
+mean_df <- expr_mean_df |>
+  dplyr::inner_join(dup_genes, by = "gene") |>
+  dplyr::mutate(type = factor(type, levels = names(dup_pal)))
+```
+
+Check the resulting data frames for *mean* expression levels
+```{r}
+nrow(mean_df)
+head(mean_df)
+```
+
+Performs Kruskal-Wallis and Dunn's post-hoc tests (BH adjusted) to generate a Compact Letter Display (CLD) for comparing expression distributions across duplication types
+*Kruskal-Wallis test*: non-parametric test to check whether expression distributions differ significantly across duplication types, used instead of ANOVA because expression data is not normally distributed
+*Dunn's post-hoc test*: pairwise comparisons between each duplication type to identify which pairs differ, with Benjamini-Hochberg correction to control false discovery rate across multiple comparisons
+*Compact Letter Display (CLD)*: summarizes the pairwise results visually, groups sharing a letter are not significantly different, making it easy to interpret many comparisons at once in a plot
+```{r}
+# Wrapper to compare distributions using Kruskal-Wallis + Dunn
+#' @param df A data frame with values and variables.
+#' @param var Character, name of column indicating variable levels.
+#' @param value Numeric, values to be used in comparisons.
+#'
+#' @return A data frame with CLD for each level.
+
+cld_kw_dunn <- function(df, var = "type", value = "csum") {
+    
+    # Perform Kruskal-Wallis test followed by a post-hoc Dunn's test
+    dunn <- FSA::dunnTest(
+        df[[value]] ~ df[[var]], method = "bh"
+    ) |>
+        purrr::pluck("res") |>
+        arrange(Z)
+    
+    # Get compact letter display (CLD)
+    cld <- rcompanion::cldList(
+        comparison = dunn$Comparison,
+        p.value = dunn$P.adj,
+        threshold = 0.05
+    )
+    
+    return(cld)
+}
+```
+
+Check CLD for mean expression levels
+```{r}
+mean_comp <- cld_kw_dunn(mean_df, var = "type", value = "exp")
+mean_comp
+```
+
+The violin plot compares mean expression by duplication mode with CLD labels for significance.
+For clarity, 522 outliers were excluded by capping the x-axis at 0.5.
+```{r}
+plot_mean <- ggplot(mean_df, aes(x = exp, y = type)) +   # <-- use mean_df, not mean_comp
+  # Draw the violin plot
+  geom_violin(aes(fill = type), show.legend = FALSE) +
+  scale_fill_manual(values = dup_pal) +
+  
+  # Add the boxplot inside
+  geom_boxplot(width = 0.1, outlier.color = "gray60", outlier.alpha = 0.5) +
+  
+  # Add CLD labels (rename Group -> type to match y-axis, set fixed x position)
+  geom_label(
+    data = mean_comp |>
+      dplyr::rename(type = Group) |>
+      dplyr::mutate(x = 0.4),
+    aes(x = x, y = type, label = Letter),
+    fill = "white", color = "black", label.size = 0.5, size = 5
+  ) +
+  
+  # Set x-axis limit
+  scale_x_continuous(limits = c(0, 0.5)) +
+  
+  # Set labels and titles
+  labs(
+    x = "Mean of log-transformed normalized counts", y = NULL,
+    title = "Mean expression level and gene duplication mode",
+    subtitle = "CLD from Kruskal-Wallis + post-hoc Dunn's test; P <0.05"
+  ) +
+  
+  theme_classic() +
+  theme(panel.background = element_rect(fill = bg))
+
+# Display the plot
+plot_mean
+
+# Save the plot
+ggsave(
+  file.path(here("products", "plots"), "Zma_Mean_Expression_violin.png"),
+  plot = plot_mean,
+  width = 7,
+  height = 5,
+  dpi = 300
+)
+```
+
+According to the resulting plot, all duplication types show low mean expression with heavy right skew. SD genes stand out with the highest mean expression (group d), while dTRD genes also show distinctly higher expression (group c). DD and rTRD are statistically indistinguishable (group a), as are PD and TD (group b).
+
+
+## 1.3 Expression breadths of duplicated genes
+Expression breadths (the number of tissues in which a gene is expressed) are calculated for Zea mays duplicate genes, and the differences in expression breadth by duplication mode are compared using Kruskal-Wallis and Dunn's post-hoc tests.
+
+Helpter function to calculate the proportion of cells in which each gene is detected for each cell type. This will be used to assess expression breadth across cell types.
+```{r}
+#' Calculate the proportion of cells in which each gene is detected for each cell type
+#' @param sce A SingleCellExperiment or SpatialExperiment object containing the data.
+#' @param cell_type_col Character, name of the column in colData(sce) that contains cell type annotations. Default is "Celltype".
+#' @return A data frame with columns: gene, cell_type, prop_detected.
+
+get_prop_detected <- function(sce, cell_type_col = "Celltype") {
+  prop_detected <- scuttle::aggregateAcrossCells(
+    sce,
+    statistics   = "prop.detected",
+    ids          = sce[[cell_type_col]]
+  ) |>
+    assay() |>
+    reshape2::melt() |>
+    dplyr::select(gene = Var1, cell_type = Var2, prop_detected = value) |>
+    dplyr::mutate(cell_type = as.character(cell_type))
+  
+  return(prop_detected)
+}
+```
+
+Calculate absolute expression breadth.
+```{r}
+# A gene is considered expressed in a cell type if it is detected in at least 1%% of spots in that cell type
+prop_detected_zma <- get_prop_detected(sce_paralogs, cell_type_col = "Celltype")
+
+eb_zma <- prop_detected_zma |>
+  # Average detection proportion across spots within each cell type
+  dplyr::group_by(gene, cell_type) |>
+  dplyr::mutate(mean_prop = mean(prop_detected, na.rm = TRUE)) |>
+  dplyr::ungroup() |>
+  # Keep only cell types where the gene clears the 1% detection threshold
+  dplyr::filter(mean_prop >= 0.01) |>
+  dplyr::distinct(gene, cell_type, .keep_all = TRUE) |>
+  # Count the number of cell types each gene is expressed in (= expression breadth)
+  dplyr::count(gene) |>
+  # Join with duplication mode information
+  dplyr::inner_join(dup_list_valid$genes, by = "gene") |>
+  dplyr::mutate(type = factor(type, levels = names(dup_pal)))
+```
+
+Check the resulting absolute expression breadth
+```{r}
+nrow(eb_zma)
+head(eb_zma)
+```
+
+Conduct statistical testing (Kruskal-Wallis, Dunn post-hoc test)
+```{r}
+# Returns a cld indicating which duplication types differ significantly from each other (BH-adjusted p<0.05)
+eb_cld <- cld_kw_dunn(eb_zma, var = "type", value = "n") |>
+  dplyr::rename(type = Group)
+
+eb_cld
+```
+
+Generate violin plot of absolute expression breadth by duplication mode with CLD labels. 
+```{r}
+plot_eb <- ggplot(eb_zma, aes(x = n, y = type)) +
+  geom_violin(aes(fill = type), show.legend = FALSE) +
+  scale_fill_manual(values = dup_pal) +
+  geom_boxplot(width = 0.1, outlier.color = "gray60", outlier.alpha = 0.5) +
+  # x position passed as a fixed value directly, not from the data
+  geom_label(
+    data  = eb_cld,
+    aes(y = type, label = Letter),
+    x     = Inf,          # places label at the far right edge of whatever the scale is
+    hjust = 1.1,          # nudges it just inside the right edge
+    fill  = "white", color = "black", label.size = 0.5, size = 5
+  ) +
+  # Let the x-axis scale freely to the data range — avoids removing out-of-range rows
+  scale_x_continuous(expand = expansion(mult = c(0.02, 0.15))) +
+  labs(
+    title    = "Absolute expression breadth and gene duplication mode",
+    subtitle = "CLD from Kruskal-Wallis + post-hoc Dunn's test; P <0.05",
+    x        = "Number of cell types in which gene is detected",
+    y        = NULL
+  ) +
+  theme_classic() +
+  theme(panel.background = element_rect(fill = bg))
+
+plot_eb
+
+ggsave(
+  file.path(here("products", "plots"), "Zma_Expression_Breadth_violin.png"),
+  plot   = plot_eb,
+  width  = 7,
+  height = 5,
+  dpi    = 300
+)
+```
+
+The resulting violin plot indicates that SD genes are detected in the fewest cell types (group e), despite having the highest mean expression. This suggests that they are highly but narrowly expressed. PD genes show the broadest expression breadth (group a), while dTRD genes are the most broadly detected (group d).
+
+
+## 1.4 Saving
+
+Save the mean expression and expression breadth plots together in a single figure for easier comparison across duplication modes.
+```{r}
+combined_plot <- plot_mean / plot_eb + plot_layout(heights = c(1, 1))
+ggsave(
+  file.path(here("products", "plots"), "Zma_Expression_Summary_violin.png"),
+  plot   = combined_plot,
+  width  = 7,
+  height = 10,
+  dpi    = 300
+)
+```
+
+```{r}
+sessionInfo()
+```

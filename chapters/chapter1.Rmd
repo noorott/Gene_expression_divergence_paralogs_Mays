@@ -30,17 +30,15 @@ library(ragg) #to save plots
 library(PCAtools)
 library(flextable)
 library(stringr)
+library(igraph)
 ```
 
 ```{r}
-# Make shore we can render plots on hpc
+# Make sure we can render plots on hpc
 options(bitmapType = "cairo")
 ```
 
-
-##################
-## Read in Data ##
-##################
+## 1.1 Datasets Exploration
 
 Setting root directory to files
 ```{r}
@@ -58,11 +56,6 @@ Reading in RDS files into list of single cell experiments
 sce_list <- lapply(files, readRDS)
 names(sce_list) <- sub("\\.rds$", "", basename(files))
 ```
-
-
-##########################
-## Datasets Exploration ##
-##########################
 
 Gathering info on the datasets
 ```{r}
@@ -132,10 +125,8 @@ sce_info_plot
 
 Save the plots and figures in a folder 
 ```{r}
-if (FALSE) {
-  outfile <- file.path(out_dir, paste0("plot_", 'sce_info_',".png")) #to overwrite an other plot with the same name 
-  ggsave(filename = outfile, plot = sce_info_plot)
-  }
+outfile <- file.path(out_dir, paste0("plot_", 'sce_info_',".png")) #to overwrite an other plot with the same name 
+ggsave(filename = outfile, plot = sce_info_plot)
 ```
 
 Check annotated celltypes in datasets
@@ -149,33 +140,7 @@ cell_types <- as.data.frame(cell_types)
 cell_types
 ```
 
-Possible problems with cell types to keep in mind for downstream analysis:
-- contamination and unknown
-  --> will be removed
-- SRP224648 and SRP281914: only 2 cell types; not really enough to define REB
-  --> don't use for individual dataset analysis (but do use for total)
-- SRP325657_1: only 3 cell types
-  --> enough for individual analysis
-- SRP325657_2: Pavement cell-N and Pavement cell-A	 
-    PCs-A: PCs with active anthocyanin biosynthesis
-    PCs-N: PCs lacking active anthocyanin biosynthesis
-    Both are natural celltypes (not transformed) and are thus retained
-- SRP417893: leaf rim; dubious cell type
-    Paper: "Here we use single-cell RNA-sequencing analyses to identify a ‘rim’ cell type 
-    present at the margins of maize leaf primordia. Cells in the leaf rim have a 
-    distinctive identity and share transcriptional signatures with proliferating 
-    ligule cells"
-    Can be seen as valid cell types.
-    
-- resolution problem; 
-  some datasets have more cell types simply because higher resolution or more 
-  similar cell types
-  eg SRP272727_23_26; multiple meristem subcategories
-  eg SRP266308_1; vascular tissue <-> other; xylem & phloem
-  -->
-
-
-UMAP plot of each data set colored by cell type
+UMAP plot of each dataset colored by cell type:
 ```{r}
 for (i in 1:length(sce_list)) {
   plot <- plotReducedDim(sce_list[[i]], dimred = "UMAP", colour_by = "Celltype") +
@@ -191,7 +156,7 @@ for (i in 1:length(sce_list)) {
     }
 } 
 ```
-PCA plot of each data set colored by cell type
+PCA plot of each dataset colored by cell type
 ```{r}
 for (i in 1:length(sce_list)) {
   plot <- plotReducedDim(sce_list[[i]], dimred = "PCA", colour_by = "Celltype") +
@@ -212,12 +177,12 @@ Violin plot of number of expressed genes per dataset
 ```{r, fig.width=7, fig.height=8}
 df <- map_df(names(sce_list), function(name) {
   sce <- sce_list[[name]]
-  expr <- assay(sce, "counts")   # your assay
+  expr <- assay(sce, "counts") 
 
   tibble(
     dataset = name,
     n_genes = colSums(expr > 0),
-    tissue = colData(sce)$Tissue  # automatically gets tissue
+    tissue = colData(sce)$Tissue 
   )
 })
 
@@ -242,18 +207,15 @@ if (FALSE){
 We see that for example the leaf datasets are comparable in expressed genes even though they are two different datasets
 
 
-#####################
-## Quality control ##
-#####################
+## 1.2 Quality control 
 
-## Filtering of unwanted cells 
+### 1.2.1 Filtering of unwanted cells 
 
 Total number of cells before filtering
 ```{r}
 sum(as.numeric(sce_info["n_cells",-ncol(sce_info)]))
 ```
-
-Look at present genotypes
+Regard the present genotypes
 ```{r}
 print("Genotypes")
 for (i in 1:9) {
@@ -263,8 +225,7 @@ for (i in 1:9) {
       sep =" ")
 }
 ```
-SRP417893: two genotypes: B73 and B73 (ns); only use WT
-(B73 (ns): double mutations in the redundant maize Wox3 homologs narrow sheath1 (Ns1) and narrow sheath2 (Ns2) delete the marginal domain, resulting in narrow leaves that fail to form a sheathing leaf base)
+In SRP417893 two genotypes are present: B73 and B73 (ns); We will only use B73 (wild type)
 
 Look at present conditions
 ```{r}
@@ -276,10 +237,9 @@ for (i in 1:9) {
       sep =" ")
 }
 ```
-SRP266308_1: 2 conditions: Kn1-O/+  and normal cells; only use normal cells? 
-Kn1-O/+ is some mutant line from what i understand from paper
+In SRP266308_1 two conditions are present: Kn1-O/+  and normal cells; We will only use normal cells
 
-SRP335180: 2 conditions: nitrate+ and nitrate- plants 
+In SRP335180 two conditions are present: nitrate+ and nitrate- plants 
 (grown in medium with or without nitrate); only use nitrate+ since this is the normal condition.
 
 Remove the unwanted cells
@@ -304,11 +264,11 @@ rm(bad_celltypes, bad_genotypes, bad_conditions)
 ```{r}
 sum(as.numeric(lapply(sce_list, ncol)))
 ```
+228359 cells remain after filtering unwanted cells.
 
+### 1.2.2 Filtering of low quality cells 
 
-## Filtering of low quality cells 
-
-Checking for empty droplets
+Check for empty droplets
 ```{r}
 plots <- lapply(seq_along(sce_list), function(i) {
     sce <- sce_list[[i]]
@@ -350,8 +310,7 @@ rm(plots, p)
 Filtering of empty droplets is already done
 Mitochondrial DNA is also already filtered out (see paper scPlantDB)
 
-
-## Normalisation and log transformation
+### 1.2.3 Normalisation and log transformation
 
 Check if counts are integers or log transformed
 ```{r}
@@ -382,6 +341,7 @@ norm_df_unlisted
 rm(norm_df, norm_df_unlisted)
 ```
 All datasets contain integers and don't have size factors present. 
+This is an indication that the data was not yet normalised.
 
 Check if normalisation has already been done by plotting mean-variance relationship
 ```{r}
@@ -421,161 +381,83 @@ rm(sce)
 ```
 Linear relation between the variance in the mean: data is not logtransformed + normalised yet. This is done ourselves in the next section 
 
+## 1.3 Within Dataset Normalisation 
 
-##################################
-## Within Dataset Normalisation ## 
-##################################
+First compute clusters using the quickcluster fucntion. Based on these clusters sizefactors are computed using the sizeFactors function.
 
-Normalisaton is done by deconvolution:
-- celltypes can have differing library sizes + compositional bias in scRNA-seq
-(--> simple library size norm not valid)
-- dominance of low and zero counts + many genes DE between celltypes
-(--> bulk RNA norm methods problematic)
-
-Counts are pooled from many cells (increases count size) for accurate size factor estimation. These size factors are calculated per cluster to avoid the assumption that most genes are non-DE over the entire population (only assumes that most genes are non DE within clusters). Then size factors are rescaled to be comparable across clusters.
-
-Celltypes can be taken as clusters or clusters can be decided with Quickcluster function:
-
-!don't run again, read in rds at the end!
-
-## Normalisation with clusters from Quickcluster
-
-Quickcluster function:
-param method = String specifying the clustering method to use. "hclust" uses hierarchical clustering while "igraph" uses graph-based clustering.
-
-Do quickcluster for all singleCellExperiments then compute sizefactors
+!This may take some time. If you have already run the normalisation and saved the corresponding object, go to section 1.4.
 ```{r}
 set.seed(42)
-if (FALSE) {
-  sce_list <- lapply(seq_along(sce_list), function(i) {
-    sce <- sce_list[[i]]
-    cl <- quickCluster(sce, assay.type = "counts")
-    sce <- computeSumFactors(sce, clusters = cl, assay.type = "counts")
-    
-    sample_name <- names(sce_list)[i]
-    outfile <- file.path(out_dir, paste0("deconvoluted_sizefactors_", sample_name, ".png"))
-    
-    png(outfile, width = 800, height = 600)
-    p <- plot(
-      librarySizeFactors(sce, assay.type = "counts"),
-      sizeFactors(sce),
-      xlab = "Library size factor",
-      ylab = "Deconvolution size factor",
-      log = "xy",
-      pch = 16,
-      col = as.integer(factor(cl))
-    )
-    abline(a = 0, b = 1, col = "red")
-    
-    dev.off()
-    
-    sce
-  })
-}
-```
-
-Size factors are used to log norm transform counts
-```{r}
-if (FALSE) {
-  sce_list <- lapply(sce_list, function(sce) {
-  logNormCounts(sce, assay.type = "counts")
-})
-
-assayNames(sce_list$SRP145013)}
-```
-
-```{r}
-if (FALSE) {
-  saveRDS(sce_list, file = "normalised_sce_list_quickcluster.rds")
-  }
-```
-
-```{r}
-if (FALSE) {
-  for (name in names(sce_list)) {
-    sce <- sce_list[[name]]
-    dec <- modelGeneVar(sce)
-    varfit <- metadata(dec)
-    
-    sample_name <- name
-    outfile <- file.path(out_dir, paste0("mean_var_after_normalisation_", sample_name, ".png"))
-    
-    png(outfile, width = 800, height = 600)
-    plot(varfit$mean, varfit$var, 
-        xlab="Mean of log-expression",
-        ylab="Variance of log-expression")
-    curve(varfit$trend(x), col="dodgerblue", add=TRUE, lwd=2)
-    
-    dev.off()
-    rm(sce, dec, varfit)
-    }
-  }
-```
-
-## normalisation based on celltype
-Same but with annotated celltypes as clusters 
-
-```{r}
-set.seed(42)
-if (FALSE){
-  sce_list <- lapply(sce_list, function(sce) {
-  cl <- sce$Celltype
+sce_list <- lapply(seq_along(sce_list), function(i) {
+  sce <- sce_list[[i]]
+  cl <- quickCluster(sce, assay.type = "counts")
   sce <- computeSumFactors(sce, clusters = cl, assay.type = "counts")
   
-  plot(librarySizeFactors(sce, assay.type = "counts"), sizeFactors(sce),
-       xlab="Library size factor",
-       ylab="Deconvolution size factor", log='xy', pch=16,
-       col=as.integer(factor(cl)))
-  abline(a=0, b=1, col="red")
+  sample_name <- names(sce_list)[i]
+  outfile <- file.path(out_dir, paste0("deconvoluted_sizefactors_", sample_name, ".png"))
+  
+  png(outfile, width = 800, height = 600)
+  p <- plot(
+    librarySizeFactors(sce, assay.type = "counts"),
+    sizeFactors(sce),
+    xlab = "Library size factor",
+    ylab = "Deconvolution size factor",
+    log = "xy",
+    pch = 16,
+    col = as.integer(factor(cl))
+  )
+  abline(a = 0, b = 1, col = "red")
+  
+  dev.off()
   
   sce
-})}
+})
+
+```
+
+Size factors are used to log transform and normalise the counts assay.
+```{r}
+sce_list <- lapply(sce_list, function(sce) {
+logNormCounts(sce, assay.type = "counts")
+})
 ```
 
 ```{r}
-if (FALSE) {sce_list <- lapply(sce_list, function(sce) {
-  logNormCounts(sce, assay.type="counts")
-})}
+saveRDS(sce_list, file = "normalised_sce_list_quickcluster.rds")
 ```
 
+Plot the mean-vor relation again.
 ```{r}
-if (FALSE) {saveRDS(sce_list, file = "normalised_sce_list_celltype.rds")}
-```
-
-```{r}
-if (FALSE) {for (name in names(sce_list)) {
+for (name in names(sce_list)) {
   sce <- sce_list[[name]]
   dec <- modelGeneVar(sce)
   varfit <- metadata(dec)
+  
+  sample_name <- name
+  outfile <- file.path(out_dir, paste0("mean_var_after_normalisation_", sample_name, ".png"))
+  
+  png(outfile, width = 800, height = 600)
   plot(varfit$mean, varfit$var, 
       xlab="Mean of log-expression",
       ylab="Variance of log-expression")
   curve(varfit$trend(x), col="dodgerblue", add=TRUE, lwd=2)
+  
+  dev.off()
   rm(sce, dec, varfit)
-  }}
-```
-
-
-## reading RDS
-
-Choose Quickcluster based, this is the best --> put TRUE
-```{r}
-if (TRUE) {
-  sce_list <- readRDS("normalised_sce_list_quickcluster.rds")
-} else {
-  sce_list <- readRDS("normalised_sce_list_celltype.rds")
 }
 ```
 
 
-##########################
-## Data Set Aggregation ##
-##########################
+## 1.4 Dataset Aggregation 
 
-## Combining seperate SingleCellExperiments into 1 object
+Read in the normalised singlecellExperiments.
+```{r}
+sce_list <- readRDS("normalised_sce_list_quickcluster.rds")
+```
 
-First we verify if single cell experiments can be merged without problems
-(cbind attempts to combine internal metadata tables of slots in SCE object --> these slots need to have same items)
+Here we will combine the seperate SingleCellExperiments into 1 object
+
+First we verify if single cell experiments can be merged without problems, by investigating the metadatatable of the sce objects.
 ```{r}
 # Verify if gene names align
 print("gene names align:")
@@ -605,40 +487,32 @@ all(sapply(X = sce_list,
        FUN = function(x) identical(names(int_colData(x)), names(int_colData(sce_list$SRP145013)))))
 ```
 
-reduced dimensions do not align for all data sets
+reduced dimensions do not align for all datasets
 ```{r}
 sapply(X = sce_list, 
        FUN = function(x) names(reducedDims(x)))
 ```
-Data set SRP224648 has TSNE in addition to PCA and UMAP in reduced dimension slot
+Dataset SRP224648 has TSNE in addition to PCA and UMAP in reduced dimension slot
 
 Remove tsne from Dataset SRP224648
 ```{r}
 reducedDims(sce_list$SRP224648)$TSNE <- NULL
 names(reducedDims(sce_list$SRP224648))
 ```
-Now everything aligns and sce list can be collapsed into one sce object
-
+Now everything aligns and sce list can be collapsed into one sce object.
 ```{r}
-# batch identifier already present in coldata()$Dataset
-
-# merge
 sce <- do.call(cbind, sce_list)
-# do.call expands list into individual elements for cbind to bind together
 
 # remove sce_list to save memory
 rm(sce_list)
 ```
 The different datasets are now combined into one single cell experiment object. To remove technical variation between datasets, batch correction should be performed
 
+### 1.4.1 Visualisation with TSNE plots
 
-######################
-## Batch correction ##
-######################
+Pre-correction Visualization with TSNE plots
 
-## Pre-correction Visualization with TSNE plots
-
-Before batch correction is performed, the data is visualized with TSNE plots. This way the effect of batch correction can be examined trough comparison with later TSNE plots
+Before batch correction is performed, the data is visualized with TSNE plots. This way the effect of batch correction can be examined trough comparison of the TSNE plots before and after batch correction.
 ```{r}
 # Feature selection for dimensionality reduction: want genes that are 
 # informative of the biological structure of the data
@@ -671,16 +545,18 @@ plot_pca_variances <- function(sce, n = 30, title = "Variance explained per PC")
         ggtitle(title)
 }
 ```
+
+run PCA using top 10% of all genes.
+
+! This may take a wile! If you already ran PCA once skip to the next cell
 ```{r}
-# using top 10% of all genes
-if (FALSE) {
-  sce <- runPCA(sce, subset_row = chosen.hvgs)
-  percent.var <- attr(reducedDim(sce, "PCA"), "percentVar")
-  chosen.elbow <- findElbowPoint(percent.var)
-  p <- plot_pca_variances(sce) + 
-    geom_vline(xintercept = chosen.elbow, color = "red")
-  ggsave(here("plots_and_figures", "PCA_explVar_uncorrected.png"), p)
-}
+sce <- runPCA(sce, subset_row = chosen.hvgs)
+percent.var <- attr(reducedDim(sce, "PCA"), "percentVar")
+chosen.elbow <- findElbowPoint(percent.var)
+p <- plot_pca_variances(sce) + 
+  geom_vline(xintercept = chosen.elbow, color = "red")
+ggsave(here("plots_and_figures", "PCA_explVar_uncorrected.png"), p)
+
 ```
 
 
@@ -695,8 +571,7 @@ if (FALSE) {
 sce$Dataset = as.factor(sce$Dataset)
 ```
 
-
-making dataframe for TSNE plots
+Make dataframe for TSNE plots
 ```{r}
 color_vec <- c("#5A5156", "#E4E1E3", "#F6222E", "#FE00FA", "#16FF32", "#3283FE", 
                "#FEAF16", "#B00068", "#1CFFCE", "#90AD1C", "#2ED9FF", "#DEA0FD", 
@@ -732,17 +607,15 @@ tsne_general_celltype <- TSNE_df %>%
     theme(
       legend.text = element_text(size = 8),     # textsize of legend elements
       legend.key.size = unit(0.3, "cm"))# boxsize of legend elements
-if (FALSE){
-  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch", ".png"))
-  ggsave(outfile, tsne_general_dataset, width = 8, height = 6, units = "in")
-  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype", ".png"))
-  ggsave(outfile, tsne_general_celltype, width = 10, height = 6, units = "in")
-}
+
+outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch", ".png"))
+ggsave(outfile, tsne_general_dataset, width = 8, height = 6, units = "in")
+outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype", ".png"))
+ggsave(outfile, tsne_general_celltype, width = 10, height = 6, units = "in")
+
 
 c(tsne_general_dataset,tsne_general_celltype)
 ```
-Possible problem: shared celltypes between datasets are taken together (eg xylem). Do we want this? Otherwise a suffix of the dataset should be added to all coldata values (eg xylem in colData$Celltype--> xylem_SRP272727_23_26, xylem_SRP145013, xylem_SRP335180)
-
 Sample effects; most variance is due to differences between datasets, not celltypes
 further verify this by plotting TSNE only for leaf datasets and for shared cell types 
 ```{r}
@@ -768,17 +641,17 @@ tsne_leaf_celltype <- TSNE_df %>%
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     )
-if (FALSE){
-  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch_leaf", ".png"))
-  ggsave(outfile, tsne_leaf_dataset, width = 8, height = 6, units = "in")
-  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype_leaf", ".png"))
-  ggsave(outfile, tsne_leaf_celltype, width = 8, height = 6, units = "in")
-  }
+
+outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch_leaf", ".png"))
+ggsave(outfile, tsne_leaf_dataset, width = 8, height = 6, units = "in")
+outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype_leaf", ".png"))
+ggsave(outfile, tsne_leaf_celltype, width = 8, height = 6, units = "in")
+
 c(tsne_leaf_dataset, tsne_leaf_celltype)
 ```
-shared cell types between datasets dont cluster together --> strong dataset effect
+We observe a large effect due to dataset, not celltype.
 
-same for the two root samples
+Verify this affect for the root datasets too.
 ```{r}
 tsne_root_dataset <- TSNE_df %>%
   filter(str_detect(tissue, "Root")) %>%      # plot leaf datasets
@@ -802,41 +675,39 @@ tsne_root_celltype <- TSNE_df %>%
     guides(                                   # separate aes for legend 
       color = guide_legend(override.aes = list(size=3, alpha = 1))
     )
-if (FALSE){
-  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch_root", ".png"))
-  ggsave(outfile, tsne_root_dataset, width = 8, height = 6, units = "in")
-  outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype_root", ".png"))
-  ggsave(outfile, tsne_root_celltype, width = 8, height = 6, units = "in")
-}
+
+outfile <- file.path(out_dir, paste0("TSNE_uncorrected_batch_root", ".png"))
+ggsave(outfile, tsne_root_dataset, width = 8, height = 6, units = "in")
+outfile <- file.path(out_dir, paste0("TSNE_uncorrected_celltype_root", ".png"))
+ggsave(outfile, tsne_root_celltype, width = 8, height = 6, units = "in")
 
 c(tsne_root_dataset, tsne_root_celltype)
 ```
 
-Removing reduced dims to make some space
+Removing reduced dims to free memory.
 ```{r}
-
 reducedDim(sce, "PCA") <- NULL
 reducedDim(sce, "TSNE") <- NULL
 reducedDim(sce, "UMAP") <- NULL
 sce_copy <- sce
 ```
 
-## Batch correction
+## 1.6 Batch correction
 
-batch correction options:
+Possible batch correction methods:
 
 - **linear modelling**,eg removeBatchEffect from limma, regressBatches from batchelor):
-fits linear model through gene expression profile with batch term and then recomputing the observations without the batch effect
-not good because assumes that composition of cell subpopulations is the same across batches
-
+fits linear model through gene expression profile with batch term and then recomputing the observations without the batch effect.
+Assumes that composition of cell subpopulations is the same across batches
 
 - **rescaleBatches** from batchelor
-roughly equivalent to applying linear regression, also assumes constant composition -> not good
+roughly equivalent to applying linear regression, also assumes constant composition.
 
 - **MNN correction**, eg fastMNN from batchelor
-Finds nearest neighbor cell pairs between different batches --> assumes these cells are from the same biological state. Batch effect is estimated by the difference between these nearest neighbors. Does not assume that the population composition is the same or known beforehand. Key assumption is that the batch effect is orthogonal to the biology, usually reasonable as random vector is likely orthogonal --> could also be good option, but I am not sure if its a problem for this algorithm that not all celltypes are present in all datasets
+Finds nearest neighbor cell pairs between different batches. Assumes these cells are from the same biological state. Batch effect is estimated by the difference between these nearest neighbors. Does not assume that the population composition is the same or known beforehand. Key assumption is that the batch effect is orthogonal to the biology, usually reasonable as random vector is likely orthogonal --> could also be good option, but I am not sure if its a problem for this algorithm that not all celltypes are present in all datasets
 
 
+### 1.6.1 Explore data to determine optimal batch correction method
 Visualisation of overlap
 ```{r}
 #table that counts the datasets containing a certain celltype 
@@ -867,7 +738,7 @@ dataset_pairs <- expand_grid(
   Dataset_1 = unique(cell_types_long$Dataset),
   Dataset_2 = unique(cell_types_long$Dataset)
 ) |>
-  filter(Dataset_1 < Dataset_2)  # vermijd dubbele & zelf-comparisons
+  filter(Dataset_1 < Dataset_2)  # avoid dubbel & zelf-comparisons
 
 pairwise_overlap <- dataset_pairs |>
   rowwise() |>
@@ -901,7 +772,6 @@ save_as_docx(ft_pairs, path = "pairwise_dataset_overlap.docx")
 ft_pairs
 ```
 ```{r}
-library(igraph)
 g <- graph_from_data_frame(
   pairwise_overlap |>
     filter(Overlap) |>
@@ -940,21 +810,25 @@ dataset_in_overlap_set <- tibble(
 
 dataset_in_overlap_set
 ```
-Transitive connectivity between datasets is sufficient, meaning that not every dataset pair is required to share a cell type directly, as long as all datasets are connected through a chain of overlapping cell types. The assumption of overlap between datasets is met, we can do MNN
+Transitive connectivity between datasets is sufficient, meaning that not every dataset pair is required to share a cell type directly, as long as all datasets are connected through a chain of overlapping cell types. The assumption of overlap between datasets is met, we can do MNN.
 
-## Batch correction with MNN
-start from uncorrected sce again, or work with counts in corrected sce 
-- Compared to linear regression, MNN correction does not assume that the population composition is the same or known beforehand. This is because it learns the shared population structure via identification of MNN pairs and uses this information to obtain an appropriate estimate of the batch effect.
-- Consider a cell a in batch A, and identify the cells in batch B that are nearest neighbors to a in the expression space defined by the selected features. Repeat this for a cell b in batch B, identifying its nearest neighbors in A. Mutual nearest neighbors are pairs of cells from different batches that belong in each other’s set of nearest neighbors. The reasoning is that MNN pairs represent cells from the same biological state prior to the application of a batch effect 
-- key assumption: the batch effect is orthogonal to the biology in high-dimensional expression space.
-- The most relevant parameter for tuning fastMNN() is k, which specifies the number of nearest neighbors to consider when defining MNN pairs. This can be interpreted as the minimum anticipated frequency of any shared cell type or state in each batch. Increasing k will generally result in more aggressive merging as the algorithm is more generous in matching subpopulations across batches. It can occasionally be desirable to increase k if one clearly sees that the same cell types are not being adequately merged across batches.
-- In the specific case of MNN correction, we can also set auto.merge=TRUE to allow it to choose the “best” order in which to perform the merges. This is slower but can occasionally be useful when the batches involved have very different cell type compositions.
+## 1.6.2 Batch correction with MNN
+
+Compared to linear regression, MNN correction does not assume that the population composition is the same or known beforehand. This is because it learns the shared population structure via identification of MNN pairs and uses this information to obtain an appropriate estimate of the batch effect.
+
+Consider a cell a in batch A, and identify the cells in batch B that are nearest neighbors to a in the expression space defined by the selected features. Repeat this for a cell b in batch B, identifying its nearest neighbors in A. Mutual nearest neighbors are pairs of cells from different batches that belong in each other’s set of nearest neighbors. The reasoning is that MNN pairs represent cells from the same biological state prior to the application of a batch effect 
+
+Key assumption: the batch effect is orthogonal to the biology in high-dimensional expression space.
+
+The most relevant parameter for tuning fastMNN() is k, which specifies the number of nearest neighbors to consider when defining MNN pairs. This can be interpreted as the minimum anticipated frequency of any shared cell type or state in each batch. Increasing k will generally result in more aggressive merging as the algorithm is more generous in matching subpopulations across batches. It can occasionally be desirable to increase k if one clearly sees that the same cell types are not being adequately merged across batches.
+
+In the specific case of MNN correction, we can also set auto.merge=TRUE to allow it to choose the “best” order in which to perform the merges. This is slower but can occasionally be useful when the batches involved have very different cell type compositions.
 
 the fastMNN() function performs PCA to reduce the dimensions beforehand and speed up the downstream neighbor detection steps.
 
+This again may time some time, if you already ran the batchcorrection once, just read in the saved .rds file.
 ```{r}
 set.seed(1000101001)
-#read in file, can take long
 if (FALSE) {mnn.out <- fastMNN(assay(sce_copy, 'counts'), 
                                batch = sce_copy$Dataset, d=50, k=20, subset.row=chosen.hvgs,
                                BSPARAM=BiocSingular::RandomParam(deferred=TRUE), 
@@ -963,11 +837,8 @@ if (FALSE) {mnn.out <- fastMNN(assay(sce_copy, 'counts'),
 } else {
   mnn.out <- readRDS("corrected_mnn.rds")
 }
-
-#hier wil je de assay uit mnn.out in sce_copy krijgen om daar dan de TSNE op te laten lopen
-#assay(sce_copy, "reconstructed") <- assay(mnn.out$reconstructed) 
 ```
---> not possible to put the assay of mnn.out in sce_copy because the dimensions are not the same and when making a new singleCellExperiment, you get 57.3GB, so not possible 
+
 
 ```{r}
 if (FALSE) {
@@ -1004,15 +875,6 @@ TSNE_df2_mnn <- data.frame(
 )
 ```
 
-```{r}
-if (FALSE) {
-  saveRDS(TSNE_df2_mnn, file = "TSNE_df2_mnn.rds")
-} else {
-  TSNE_df2_mnn <- readRDS("TSNE_df2_mnn.rds")
-}
-```
-
-
 plot to check that celltypes cluster together   
 ```{r}
 tsne_batchcormnn_dataset <- TSNE_df2_mnn %>%
@@ -1038,10 +900,12 @@ tsne_batchcormnn_celltype <- TSNE_df2_mnn %>%
       legend.key.size = unit(0.3, "cm")) +
   theme(legend.position = "none") + 
   ggtitle("Coloured by celltype")
-if (FALSE) {outfile <- file.path(out_dir, paste0("tsne_batchcormnn_dataset", ".png"))
+
+# Save plots
+outfile <- file.path(out_dir, paste0("tsne_batchcormnn_dataset", ".png"))
 ggsave(outfile, tsne_batchcormnn_dataset)
 outfile <- file.path(out_dir, paste0("tsne_batchcormnn_celltype", ".png"))
-ggsave(outfile, tsne_batchcormnn_celltype)}
+ggsave(outfile, tsne_batchcormnn_celltype)
 c(tsne_batchcormnn_dataset, tsne_batchcormnn_celltype)
 ```
 
@@ -1073,10 +937,12 @@ tsne_batchcormnn_leaf_celltype <- TSNE_df2_mnn %>%
     ) +
   theme(legend.position = "none") + 
   ggtitle("Coloured by celltype")
-if (FALSE) {outfile <- file.path(out_dir, paste0("tsne_batchcormnn_leaf_dataset", ".png"))
+
+# Save plots
+outfile <- file.path(out_dir, paste0("tsne_batchcormnn_leaf_dataset", ".png"))
 ggsave(outfile, tsne_batchcormnn_leaf_dataset)
 outfile <- file.path(out_dir, paste0("tsne_batchcormnn_leaf_celltype", ".png"))
-ggsave(outfile, tsne_batchcormnn_leaf_celltype)}
+ggsave(outfile, tsne_batchcormnn_leaf_celltype)
 c(tsne_batchcormnn_leaf_dataset, tsne_batchcormnn_leaf_celltype)
 ```
 
@@ -1111,22 +977,18 @@ tsne_batchcormnn_root_celltype <- TSNE_df2_mnn %>%
   theme(legend.position = "none") + 
   ggtitle("Coloured by celltype")
 
-if (TRUE){outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_dataset", ".png"))
+# Save plots
+outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_dataset", ".png"))
 ggsave(outfile, tsne_batchcormnn_root_dataset)
 outfile <- file.path(out_dir, paste0("tsne_batchcormnn_root_celltype", ".png"))
-ggsave(outfile, tsne_batchcormnn_root_celltype)}
+ggsave(outfile, tsne_batchcormnn_root_celltype)
 c(tsne_batchcormnn_root_dataset, tsne_batchcormnn_root_celltype)
 ```
 
-
-##################
-## Data summary ##
-##################
+## 1.7 Data summary 
 
 We will summarize the data across cell type and organ, enabling further analysis.
 
-
-As the quality of batch correction was not satisfactory, we will work further with uncorrected counts. This will have to be taken into account in subsequent analysis.
 ```{r}
 sce <- readRDS("uncorrected_sce_RedDim.rds")
 ```
@@ -1175,27 +1037,13 @@ summarized_sce <- aggregateAcrossCells(
   store.number = "ncells")                   # store number of cells 
 ```
 
-Save as RDS
+Save objects for further analysis as RDS
 ```{r}
 saveRDS(sce, "uncorrected_sce.rds")
 ```
 ```{r}
 saveRDS(summarized_sce, file = "summarized_sce.rds")
 ```
-
-
-TO DO: 
-- investigate what n_experiments is (see line 56), if these are multiple samples within each dataset we might have to correct for batch effects within each dataset aswell?
-
-
-- additional data visualization plots?
-- within dataset quality control plots (doublets, low quality droplets); see tutorial or stat genomics
-- tidy code and comments
-
-
-QUESTIONS:
-
-
 
 ```{r}
 sessionInfo()
