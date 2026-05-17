@@ -30,15 +30,7 @@ bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
 library(rcompanion)
 library(scuttle)
 library(tidyverse)
-library(SpatialExperiment)
-library(SummarizedExperiment)
-library(DESpace)
 library(patchwork)
-library(dplyr)
-library(tibble)
-library(Matrix)
-library(stringr)
-library(ggplot2)
 library(HybridExpress)
 ```
 
@@ -79,8 +71,7 @@ dup_pal <- c(
 )
 ```
 
-Calculate the sum and mean expression level for all genes across samples.
-*Sum*: total expression across all cells, reflects how broadly/highly a gene is expressed dataset-wide
+Calculate the mean expression level for all genes across samples.
 *Mean*: average expression per cell, allows fair comparison across genes regardless of cell count
 
 Both are joined with duplication type info for downstream comparison across duplication categories
@@ -88,18 +79,6 @@ Both are joined with duplication type info for downstream comparison across dupl
 # Extract gene duplication information for valid genes
 dup_genes <- dup_list_valid$genes
 # dup_genes: 28902 x 2 (gene, type)
-
-# sum across all samples --> all cells i think? 
-expr_sum <- rowSums(logcounts(sce_paralogs), na.rm = TRUE)
-
-expr_sum_df <- tibble::tibble(
-  gene = names(expr_sum),
-  exp  = as.numeric(expr_sum)
-)
-
-sum_df <- expr_sum_df |>
-  dplyr::inner_join(dup_genes, by = "gene") |>
-  dplyr::mutate(type = factor(type, levels = names(dup_pal)))
 
 # mean across all samples
 expr_mean <- rowMeans(logcounts(sce_paralogs), na.rm = TRUE)
@@ -112,12 +91,6 @@ expr_mean_df <- tibble::tibble(
 mean_df <- expr_mean_df |>
   dplyr::inner_join(dup_genes, by = "gene") |>
   dplyr::mutate(type = factor(type, levels = names(dup_pal)))
-```
-
-Check the resulting data frames for *sum* expression levels
-```{r}
-nrow(sum_df)
-head(sum_df)
 ```
 
 Check the resulting data frames for *mean* expression levels
@@ -158,7 +131,7 @@ cld_kw_dunn <- function(df, var = "type", value = "csum") {
 }
 ```
 
-Check CLD for sum expression levels
+Check CLD for mean expression levels
 ```{r}
 mean_comp <- cld_kw_dunn(mean_df, var = "type", value = "exp")
 mean_comp
@@ -219,7 +192,7 @@ Expression breadths (the number of tissues in which a gene is expressed) are cal
 Helpter function to calculate the proportion of cells in which each gene is detected for each cell type. This will be used to assess expression breadth across cell types.
 ```{r}
 #' Calculate the proportion of cells in which each gene is detected for each cell type
-#' @paramam sce A SingleCellExperiment or SpatialExperiment object containing the data.
+#' @param sce A SingleCellExperiment or SpatialExperiment object containing the data.
 #' @param cell_type_col Character, name of the column in colData(sce) that contains cell type annotations. Default is "Celltype".
 #' @return A data frame with columns: gene, cell_type, prop_detected.
 
