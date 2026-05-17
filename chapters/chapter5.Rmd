@@ -316,11 +316,6 @@ ggsave(here("plots_and_figures", "figure_ORA_DupMode_HubGenes2.png"),
        figure_ora,
        width = 7,
        height = 5)
-
-ggsave(here("plots_and_figures", "figure_URA_DupMode_HubGenes2.png"), 
-       figure_ora,
-       width = 7,
-       height = 5)
 ```
 
 

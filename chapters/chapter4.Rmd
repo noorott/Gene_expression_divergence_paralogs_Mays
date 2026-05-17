@@ -59,7 +59,7 @@ bg <- grid::linearGradient(colorRampPalette(c("gray90", "white"))(100))
 We need to do metacell aggregation to reduce noise in the data.
 We do this using the SuperCell package.
 
-## 4.1 Create the metacells
+# 4.1 Create the metacells
 
 ! You only have to run this once, if you have  already created the metacell_sce.rds file: go to 5.2
 
@@ -100,7 +100,7 @@ colData(metacell_sce)$celltype <- sc$SC.cell.annotation. ## Add annotation cellt
 saveRDS(metacell_sce, here("chapters", "metacell_sce.rds"))
 ```
 
-## 4.2 Comparing distributions of gene-gene correlations by duplication mode
+# 4.2 Comparing distributions of gene-gene correlations by duplication mode
 
 read in the metacells and duplication data
 ```{r}
@@ -232,7 +232,7 @@ p_heatmap_rho
 POAC WGD: happened ∼53 MYA
 ZEAM WGD: happened ∼16 MYA 
 
-## 4.3 Fisher's z-transformed rho across the dataset
+# 4.3 Fisher's z-transformed rho across the dataset
 
 we compute the Fisher's z-transformed rho per pair and visualise the
 distribution by duplication mode. 
@@ -300,7 +300,7 @@ p_zrho <- zrho |>
 p_zrho
 ```
 
-# 4. Expression divergence over time
+# 4.4 Expression divergence over time
 
 Here, we explore how gene-gene correlations change over time using $K_s$ as
 a proxy for time. We use Fisher's z-transformed Spearman's $\rho$ and fit
@@ -382,7 +382,7 @@ p_rho_ks_zma <- mean_rho_zma |>
 p_rho_ks_zma
 ```
 
-## 5.4 Expression divergence by gene family
+## 4.5 Expression divergence by gene family
 
 Here, we will explore how duplicates in each gene family diverge, looking
 for families that tend to have more similar expression profiles (i.e., less
@@ -500,7 +500,8 @@ sea <- bind_rows(df_high, df_low)
 bind_rows()
 ```
 
-## Saving figures 
+# 4.6 Saving objects
+
 ```{r}
 # Save plots as PNG
 ggsave(
@@ -516,6 +517,3 @@ ggsave(
 )
 ```
 
-```{r}
-sessionInfo()
-```
